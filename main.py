@@ -50,9 +50,9 @@ def main():
             args.model = "lstm" # Liangliang: changed from "lstm"  "lgbm" is way faster with comprimsed performance
             args.download_only = False
             args.skip_backtest = False
-            args.load_model = None
+            args.load_model = f"results/{args.model}/model.pkl"
             args.save_model = f"results/{args.model}/model.pkl"
-            args.gpu = "0,1"    # -1
+            args.gpu = 0    # -1
 
         elif DEBUG_OPTION == 2:
             # transformer training
