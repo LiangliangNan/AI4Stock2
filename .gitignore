@@ -10,3 +10,4 @@
 /src/data/raw/valuation
 /src/models/__pycache__
 /src/models/utils/__pycache__
+/mlruns

@@ -7,6 +7,7 @@ Usage:
 """
 
 import argparse
+import pandas as pd
 from pathlib import Path
 
 import yaml
@@ -16,6 +17,16 @@ def load_config(config_path: str = "configs/config.yaml") -> dict:
     with open(config_path) as f:
         return yaml.safe_load(f)
 
+def make_json_safe(obj):
+    """Recursively convert pandas/numpy objects to JSON-safe types."""
+    if isinstance(obj, dict):
+        return {str(k): make_json_safe(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [make_json_safe(v) for v in obj]
+    elif isinstance(obj, pd.Timestamp):
+        return str(obj)
+    else:
+        return obj
 
 def main():
     parser = argparse.ArgumentParser(description="AI4Stock2 Quantitative Pipeline")
@@ -30,43 +41,43 @@ def main():
 
     # ===== DEBUG MODE (for PyCharm) =====
     # ==============================
-    # DEBUG_MODE = True
-    # if DEBUG_MODE:
-    #     # choose one debug configuration
-    #     DEBUG_OPTION = 1
-    #     if DEBUG_OPTION == 1:
-    #         # run full pipeline with LSTM
-    #         args.model = "lstm"
-    #         args.download_only = False
-    #         args.skip_backtest = False
-    #         args.load_model = None
-    #         args.save_model = "results/lstm/model.pkl"
-    #         args.gpu = -1
-    #
-    #     elif DEBUG_OPTION == 2:
-    #         # transformer training
-    #         args.model = "transformer"
-    #         args.download_only = False
-    #         args.skip_backtest = False
-    #         args.load_model = None
-    #         args.save_model = "results/transformer/model.pkl"
-    #         args.gpu = 0
-    #
-    #     elif DEBUG_OPTION == 3:
-    #         # only download data
-    #         args.download_only = True
-    #
-    #     elif DEBUG_OPTION == 4:
-    #         # skip backtest
-    #         args.model = "lstm"
-    #         args.skip_backtest = True
-    #
-    #     elif DEBUG_OPTION == 5:
-    #         # load existing model
-    #         args.model = "lstm"
-    #         args.load_model = "results/lstm/model.pkl"
-    #         args.skip_backtest = False
-    #     # -----------------------------------------------------------
+    DEBUG_MODE = True
+    if DEBUG_MODE:
+        # choose one debug configuration
+        DEBUG_OPTION = 1
+        if DEBUG_OPTION == 1:
+            # run full pipeline with LSTM
+            args.model = "lgbm" # Liangliang: changed from "lstm"
+            args.download_only = False
+            args.skip_backtest = False
+            args.load_model = None
+            args.save_model = f"results/{args.model}/model.pkl"
+            args.gpu = -1
+
+        elif DEBUG_OPTION == 2:
+            # transformer training
+            args.model = "transformer"
+            args.download_only = False
+            args.skip_backtest = False
+            args.load_model = None
+            args.save_model = f"results/{args.model}/model.pkl"
+            args.gpu = 0
+
+        elif DEBUG_OPTION == 3:
+            # only download data
+            args.download_only = True
+
+        elif DEBUG_OPTION == 4:
+            # skip backtest
+            args.model = "lstm"
+            args.skip_backtest = True
+
+        elif DEBUG_OPTION == 5:
+            # load existing model
+            args.model = "lstm"
+            args.save_model = f"results/{args.model}/model.pkl"
+            args.skip_backtest = False
+        # -----------------------------------------------------------
 
     cfg = load_config(args.config)
     if args.model:
@@ -214,8 +225,10 @@ def main():
 
         print_metrics(signal_metrics, portfolio_results)
 
+        safe_results = make_json_safe(portfolio_results)
         with open(results_dir / "portfolio_metrics.json", "w") as f:
-            json.dump(portfolio_results, f, indent=2, default=str)
+            json.dump(safe_results, f, indent=2)
+
     else:
         print("\n[Step 6/6] Backtest skipped.")
 
