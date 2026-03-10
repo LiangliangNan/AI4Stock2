@@ -28,8 +28,8 @@ model:
   loss: pearson
 
 strategy:
-  topk: 2   # 30
-  n_drop: 2 # 5
+  topk: 30   # 30
+  n_drop: 5 # 5
 
 backtest:
   cost:
