@@ -12,3 +12,6 @@
 /src/models/utils/__pycache__
 /mlruns
 /__pycache__
+src/dump_bin.py
+src/data/qlib_data_cn/calendars/day.txt
+src/data/qlib_data_cn/instruments/all.txt
