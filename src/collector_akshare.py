@@ -109,6 +109,7 @@ def fetch_stock_list():
 
 def save_optimized_parquet(df, path):
     """Save with zstd compression to match old pipeline."""
+    df = df.copy()
     for col in df.select_dtypes(include=['float64']).columns:
         df[col] = df[col].astype('float32')
     for col in df.select_dtypes(include=['int64']).columns:
@@ -258,7 +259,33 @@ if __name__ == "__main__":
     parser.add_argument("--convert", action="store_true", help="Convert processed Parquets to Qlib binary format")
     parser.add_argument("--workers", type=int, default=4)
     args = parser.parse_args()
-    
+
+    # ===== DEBUG MODE (for PyCharm) =====
+    # if True:  # change to False when using CLI
+    #     # -----------------------------------------------------------
+    #     # Fetch specific stocks
+    #     # args.all = False
+    #     # args.symbols = "600519,000001"
+    #     # args.update = False
+    #     # args.convert = False
+    #     args.workers = 8
+    #     # -----------------------------------------------------------
+    #     # Fetch all A - shares
+    #     args.all = True
+    #     args.symbols = None
+    #     args.update = False
+    #     args.convert = False
+    #     # -----------------------------------------------------------
+    #     # Update cached symbols
+    #     # args.all = False
+    #     # args.symbols = None
+    #     # args.update = True
+    #     # args.convert = False
+    #     # -----------------------------------------------------------
+    #     # Convert to Qlib
+    #     args.convert = True
+    #     # -----------------------------------------------------------
+
     if args.all or args.symbols or args.update:
         patcher = RequestPatcher()
         patcher.load_cookies()

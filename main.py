@@ -28,6 +28,46 @@ def main():
     parser.add_argument("--gpu", type=int, default=0, help="GPU device id (-1 for CPU)")
     args = parser.parse_args()
 
+    # ===== DEBUG MODE (for PyCharm) =====
+    # ==============================
+    # DEBUG_MODE = True
+    # if DEBUG_MODE:
+    #     # choose one debug configuration
+    #     DEBUG_OPTION = 1
+    #     if DEBUG_OPTION == 1:
+    #         # run full pipeline with LSTM
+    #         args.model = "lstm"
+    #         args.download_only = False
+    #         args.skip_backtest = False
+    #         args.load_model = None
+    #         args.save_model = "results/lstm/model.pkl"
+    #         args.gpu = -1
+    #
+    #     elif DEBUG_OPTION == 2:
+    #         # transformer training
+    #         args.model = "transformer"
+    #         args.download_only = False
+    #         args.skip_backtest = False
+    #         args.load_model = None
+    #         args.save_model = "results/transformer/model.pkl"
+    #         args.gpu = 0
+    #
+    #     elif DEBUG_OPTION == 3:
+    #         # only download data
+    #         args.download_only = True
+    #
+    #     elif DEBUG_OPTION == 4:
+    #         # skip backtest
+    #         args.model = "lstm"
+    #         args.skip_backtest = True
+    #
+    #     elif DEBUG_OPTION == 5:
+    #         # load existing model
+    #         args.model = "lstm"
+    #         args.load_model = "results/lstm/model.pkl"
+    #         args.skip_backtest = False
+    #     # -----------------------------------------------------------
+
     cfg = load_config(args.config)
     if args.model:
         cfg["model"]["name"] = args.model

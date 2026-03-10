@@ -1,32 +1,12 @@
-# Python-generated files
-__pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
-
-# Virtual environments
-.venv
-
-# Data files
-data/
-
-# Results
-results/
-*.log
-*.parquet
-*.csv
-dump_bin.py
-get_data.py
-
-# Sensitive and conversation logs
-*-qlibai4.txt
-cookies.json
-.env
-.claude/
-AI4Stock.txt
-fetch_fails_v2.log
-check_dataset.py
-mlruns/
-GEMINI.md
+.idea
+/src/__pycache__
+/data/processed/combined
+/data/processed/combined
+/data/qlib_data_cn
+/data/raw
+/src/data/processed
+/src/data/qlib_data_cn/features
+/src/data/raw/daily
+/src/data/raw/valuation
+/src/models/__pycache__
+/src/models/utils/__pycache__
