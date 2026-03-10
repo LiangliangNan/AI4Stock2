@@ -28,10 +28,10 @@ model:
   loss: pearson
 
 strategy:
-  topk: 30
-  n_drop: 5
+  topk: 2   # 30
+  n_drop: 2 # 5
 
 backtest:
   cost:
-    buy: 0.0003
-    sell: 0.0013
+    buy: 0.001
+    sell: 0.002
