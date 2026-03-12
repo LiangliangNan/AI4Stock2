@@ -47,12 +47,12 @@ def main():
         DEBUG_OPTION = 1
         if DEBUG_OPTION == 1:
             # run full pipeline with LSTM
-            args.model = "lstm" # Liangliang: changed from "lstm"  "lgbm" is way faster with comprimsed performance
+            args.model = "lgbm" # Liangliang: changed from "lstm"  "lgbm" is way faster with comproimsed performance
             args.download_only = False
             args.skip_backtest = False
-            args.load_model = f"results/{args.model}/model.pkl"
+            args.load_model = False
             args.save_model = f"results/{args.model}/model.pkl"
-            args.gpu = 0    # -1
+            args.gpu = -1    # -1
 
         elif DEBUG_OPTION == 2:
             # transformer training
