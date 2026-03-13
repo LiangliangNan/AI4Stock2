@@ -77,7 +77,7 @@ def plot_monthly_heatmap(report: pd.DataFrame, save_path: str = None):
     pivot_table = df_monthly.pivot(index="year", columns="month", values="ret")
     
     fig, ax = plt.subplots(figsize=(12, min(len(pivot_table) * 0.8 + 2, 8)))
-    sns.heatmap(pivot_table, annot=True, fmt=".2%", cmap="RdYlGn", center=0, ax=ax)
+    sns.heatmap(pivot_table, annot=True, fmt=".2%", cmap="coolwarm", center=0, ax=ax) # RdBu_r
     ax.set_title("Monthly Returns Heatmap")
     
     plt.tight_layout()
