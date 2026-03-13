@@ -1,0 +1,33 @@
+  train: [ "2000-01-01", "2023-12-31" ]
+  valid: [ "2024-01-01", "2025-12-31" ]
+  test:  [ "2026-01-01", "2026-03-08" ]
+  topk: 5   # 30
+  n_drop: 2 # 5
+  
+  [mean]
+    risk                : +0.0133
+  [std]
+    risk                : +0.0279
+  [annualized_return]
+    risk                : +3.1656
+  [information_ratio]
+    risk                : +7.3473
+  [max_drawdown]
+    risk                : -0.0758
+  [Monthly Returns Table]
+    Month           |     Return
+    ----------------|-----------
+    2026-01         |    +53.85%
+    2026-02         |     +8.76%
+    2026-03         |     -1.40%
+  [Monthly Returns Summary]
+    Max Monthly Return   : +53.85%
+    Min Monthly Return   : -1.40%
+    Positive Months      : 2 / 3
+    
+    ----------------------------------------------------------------------------------
+    
+    
+    
+    
+    
