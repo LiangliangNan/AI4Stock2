@@ -27,6 +27,19 @@ def run_rolling_pipeline():
     parser.add_argument("--load-models", action="store_true", help="Load existing models for each rolling step (skip training)")
     args = parser.parse_args()
 
+    # ===== DEBUG MODE (for PyCharm) =====
+    # ==============================
+    DEBUG_MODE = True
+    if DEBUG_MODE:
+        args.model = "lgbm" # Liangliang: changed from "lstm"  "lgbm" is way faster with comproimsed performance
+        args.horizon = 120
+        args.skip_backtest = False
+        args.load_model = f"results/{args.model}/model.pkl"
+        args.save_model = f"results/{args.model}/model.pkl"
+        args.gpu = -1    # -1
+
+
+
     cfg = load_config(args.config)
     cfg["model"]["name"] = args.model
     

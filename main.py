@@ -158,6 +158,15 @@ def main():
             model.to_pickle(args.save_model)
             print("Model saved.")
 
+            # === 【新增：保存特征处理器状态】 ===
+            handler_state_path = Path(args.save_model).parent / "handler_state.pkl"
+            print(f"Saving handler state to {handler_state_path}...")
+            with open(handler_state_path, "wb") as f:
+                import pickle
+                pickle.dump(handler, f)
+            print("Handler state saved.")
+            # ===================================
+
     # ── Step 5: Prediction & signal evaluation ────────────────────────
     print("\n[Step 5/6] Prediction & Signal Evaluation")
     from src.evaluate import (
