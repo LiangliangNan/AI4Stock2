@@ -189,21 +189,11 @@ def main():
 
     # -------------------------------------------------------------------------
     # --- 新增：板块过滤逻辑 ---
-    # 定义过滤函数：如果代码以前缀开头则返回 False (被滤掉)
-    def filter_sectors(stock_code):
-        # 去掉 Qlib 可能带有的后缀 (如 SH/SZ)
-        pure_code = stock_code.replace("SH", "").replace("SZ", "").replace(".", "").strip()
-
-        # 创业板 (30...)
-        if pure_code.startswith("30"): return False
-        # 科创板 (68...)
-        if pure_code.startswith("68"): return False
-        # 北交所 (8... 或 4...)
-        if pure_code.startswith(("8", "4")): return False
-        return True
-
-    # 应用过滤：保留符合条件的行
-    filtered_preds = latest_preds[latest_preds.index.map(filter_sectors)]
+    def is_main_board(code):
+        # 仅允许 00 或 60 开头的代码
+        return code.startswith(('00', '60'))
+    filtered_preds = latest_preds[latest_preds.index.map(is_main_board)]
+    top_k_stocks = filtered_preds.nlargest(args.top_k)
     # 在过滤后的结果中提取得分最高的 Top K
     # .nlargest 函数会自动帮我们找出分数最高的 Top K 只股票
     top_k_stocks = filtered_preds.nlargest(args.top_k)

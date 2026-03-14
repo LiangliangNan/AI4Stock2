@@ -102,7 +102,15 @@ def fetch_stock_list():
     try:
         df = ak.stock_zh_a_spot_em()
         # df = df[df["代码"].str.match(r"^(000|001|002|003|300|301|600|601|603|605|688)")]
-        df = df[df["代码"].str.match(r"^(000|001|002|003|600|601|603|605)")] #剔除创业板和科创板
+        # 只允许以下前缀的代码通过:
+        #   - 000 / 001 / 002 / 003：深证主板（包含原来的中小板）
+        #   - 600 / 601 / 603 / 605：上证主板
+        # 下列板块会被彻底排除在下载列表之外:
+        #   - 300 / 301（创业板）
+        #   - 688（科创板
+        #   - 8、4 或 920（北交所 / 新三板）
+        df = df[df["代码"].str.match(r"^(00|60)")] #剔除创业板和科创板
+        print(f"filtered stock list: 00|60")
         return df["代码"].tolist()
     except Exception as e:
         print(f"[!] Error fetching stock list: {e}")
@@ -251,6 +259,58 @@ def collect_data(symbols=None, max_workers=4):
             
     print(f"[+] Data collection finished. {success_count} symbols processed.")
 
+
+def generate_main_board_index(processed_dir: Path, qlib_dir: Path):
+    """
+    扫描处理后的数据文件夹，过滤并生成与 all.txt 格式一致的 main_board.txt 索引文件。
+    过滤逻辑：仅保留代码开头为 00 或 60 的主板股票。
+    """
+    try:
+        inst_dir = qlib_dir / "instruments"
+        inst_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1. 扫描目录下所有文件
+        all_files = list(processed_dir.glob("*.parquet"))
+        if not all_files:
+            print("[!] 未发现数据文件，跳过索引生成。")
+            return
+
+        main_board_lines = []
+        print(f"[*] 正在生成主板清单（执行正则过滤 ^(00|60) ）...")
+
+        for f in tqdm(all_files, desc="Filtering & Indexing"):
+            symbol = f.stem.upper()
+
+            # --- 核心过滤逻辑 ---
+            # 去掉可能的 Qlib 后缀进行判断
+            pure_code = symbol.replace("SH", "").replace("SZ", "").replace(".", "")
+            if not pure_code.startswith(('00', '60')):
+                continue  # 如果不是主板，直接跳过，不计入清单
+            # ------------------
+
+            # 提取日期以对齐 all.txt 格式
+            df_temp = pd.read_parquet(f, columns=['date'])
+            if not df_temp.empty:
+                start_dt = df_temp['date'].min().strftime('%Y-%m-%d')
+                end_dt = df_temp['date'].max().strftime('%Y-%m-%d')
+
+                # 格式: 股票代码 \t 开始日期 \t 结束日期
+                line = f"{symbol}\t{start_dt}\t{end_dt}"
+                main_board_lines.append(line)
+
+        # 2. 写入文件
+        output_path = inst_dir / "main_board.txt"
+        if main_board_lines:
+            with open(output_path, "w") as f:
+                f.write("\n".join(sorted(main_board_lines)) + "\n")
+            print(f"[★] 主板清单已锁定: {output_path} (共 {len(main_board_lines)} 只股票)")
+        else:
+            print("[!] 警告：过滤后未发现符合主板要求的股票！")
+
+    except Exception as e:
+        print(f"[!] 生成清单失败: {e}")
+
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
@@ -309,3 +369,6 @@ if __name__ == "__main__":
             
     if args.convert:
         convert_to_qlib()
+
+        # 调用新封装的函数生成主板清单
+        generate_main_board_index(PROCESSED_DIR, QLIB_DIR)
