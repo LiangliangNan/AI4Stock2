@@ -38,13 +38,6 @@ import pandas as pd
 from pathlib import Path
 import datetime
 
-# ---------------------------------------------------------
-# [全局配置] 禁用磁盘缓存，确保推断时数据的实时性与准确性
-# ---------------------------------------------------------
-from qlib.config import C
-C.expression_cache = None
-C.dataset_cache = None
-C.filter_cache = None
 
 from qlib.data import D
 from src.data_setup import init_qlib
@@ -216,12 +209,12 @@ def recommend(current_holdings):
 
     # 2. 载入模型与特征处理器状态
     model_path = Path("results") / model_name / "model.pkl"
-    state_path = Path("results") / model_name / "handler_state.pkl"
+    state_path = Path("results") / model_name / "handler.pkl"
 
     if (not model_path.exists()):
         raise FileNotFoundError(f"[错误] 在 results/{model_name} 下未找到“model.pkl”。请先运行训练")
     if (not state_path.exists()):
-        raise FileNotFoundError(f"[错误] 在 results/{model_name} 下未找到“handler_state.pkl”。请先运行训练")
+        raise FileNotFoundError(f"[错误] 在 results/{model_name} 下未找到“handler.pkl”。请先运行训练")
 
     with open(model_path, "rb") as f:
         model = pickle.load(f)
@@ -232,17 +225,35 @@ def recommend(current_holdings):
 
     # 3. 确定数据时间窗口 (极速模式)
     calendar = D.calendar()
-    latest_day = calendar[-1].strftime("%Y-%m-%d")
+    # latest_day = calendar[-1].strftime("%Y-%m-%d")
+    latest_day = pd.Timestamp(calendar[-1])
 
     # 手动重设 Handler 时间窗口，避免加载全量历史数据
     lookback_days = 100
     inference_start_day = calendar[-lookback_days].strftime("%Y-%m-%d")
-    handler.start_time = pd.Timestamp(inference_start_day)
-    handler.end_time = pd.Timestamp(latest_day)
+    #---------------------------------------------------------------
+    # Liangliang: 比较以下两种处理方式：
+    # 方式一：直接修改handler的start_time和end_time属性
+    # handler.start_time = pd.Timestamp(inference_start_day)
+    # handler.end_time = pd.Timestamp(latest_day)
+    # 这样做不会触发任何内部逻辑。在某些情况下可能出现：
+    #   1. 缓存未刷新
+    #   2. processor 的状态未更新，不会重新 setup
+    #---------------------------------------------------------------
+    # 方式二：调用handler.config()函数。该函数会做三件事：
+    #   1 更新 handler.start_time / end_time
+    #   2 标记 handler 数据状态失效
+    #   3 触发 setup_data()
+    #   旧缓存会被明确清除，feature pipeline会重新初始化
+    handler.config(
+        start_time=pd.Timestamp(inference_start_day),
+        end_time=pd.Timestamp(latest_day)
+    )
+    #---------------------------------------------------------------
 
     # 4. 数据时效性安全检查
     try:
-        all_data_index = handler.fetch(col_set="label").index
+        all_data_index = handler.fetch(col_set="feature").index
         data_latest_date = all_data_index.get_level_values(0).max()
         days_diff = (datetime.datetime.now() - data_latest_date).days
 
@@ -258,9 +269,9 @@ def recommend(current_holdings):
     # 5. 构造 Dataset 并执行预测
     segments = {"test": (latest_day, latest_day)}
     if model_name == "lgbm":
-        dataset = build_tabular_dataset(handler=handler, segments=segments)
+        dataset = build_tabular_dataset(handler, segments)
     else:
-        dataset = build_ts_dataset(handler=handler, segments=segments, step_len=cfg["features"]["lookback"])
+        dataset = build_ts_dataset(handler, segments, step_len=cfg["features"]["lookback"])
 
     print(f"[*] 正在计算全市场信号...")
     preds = model.predict(dataset)
