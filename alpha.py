@@ -29,7 +29,7 @@ AI4Stock2 - 极简版每日个股推荐脚本 (Daily Top-K Stock Recommender)
 
 【前置要求 (Prerequisites)】
 运行此脚本前，必须确保 Qlib 数据库已更新到最新交易日。
-你可以通过运行 `python main.py --download-only` 来完成数据更新。
+你可以通过运行 `python src/collector_akshare.py --update --convert --workers 8` 来完成数据更新。
 =========================================================================================
 """
 
@@ -133,14 +133,14 @@ def main():
             print(f"    当前数据最新日期: {data_latest_date.strftime('%Y-%m-%d')}")
             print(f"    系统今日日期:    {today.strftime('%Y-%m-%d')}")
             print(f"    相差天数:       {days_diff} 天")
-            print(f"    请先运行 'python main.py --download-only' 更新数据，否则预测结果无效！")
+            print(f"    请先运行 'python src/collector_akshare.py --update --convert --workers 8' 更新数据，否则预测结果无效！")
             print("-" * 40 + "\n")
             # 如果你希望强制停止，可以解除下面注释
             # exit(1)
         else:
             status = "✅ 数据新鲜" if days_diff <= 1 else "⚠️ 数据略有滞后(周末/节假日)"
             print(f"{status}: 最新交易日为 {data_latest_date.strftime('%Y-%m-%d')}")
-            print(f"   可先运行 'python main.py --download-only' 更新数据！")
+            print(f"   可先运行 'python src/collector_akshare.py --update --convert --workers 8' 更新数据！")
             print("-" * 40 + "\n")
     except Exception as e:
         print(f"⚠️ 无法检查数据时效性: {e}")
@@ -186,17 +186,8 @@ def main():
 
     # 用 .loc 提取出最新这一天所有股票的打分（分数越高，模型认为未来收益越好）
     latest_preds = preds.loc[actual_latest_date]
-
-    # -------------------------------------------------------------------------
-    # --- 新增：板块过滤逻辑 ---
-    def is_main_board(code):
-        # 仅允许 00 或 60 开头的代码
-        return code.startswith(('00', '60'))
-    filtered_preds = latest_preds[latest_preds.index.map(is_main_board)]
-    top_k_stocks = filtered_preds.nlargest(args.top_k)
-    # 在过滤后的结果中提取得分最高的 Top K
     # .nlargest 函数会自动帮我们找出分数最高的 Top K 只股票
-    top_k_stocks = filtered_preds.nlargest(args.top_k)
+    top_k_stocks = latest_preds.nlargest(args.top_k)
     # -------------------------------------------------------------------------
 
     # -------------------------------------------------------------------------
@@ -207,11 +198,17 @@ def main():
     print(f"   [执行策略] 明日 (T+1) 早盘集合竞价市价买入以下 TOP {args.top_k} 股票")
     print("=" * 60)
 
-    # 遍历推荐列表并格式化打印
+    # -------------------------------------------------------------------------
+    # 严格对齐的格式化打印 - 修复版
+    # -------------------------------------------------------------------------
+    print("=" * 65)
+    print(f"{'排名':<8} |   {'股票代码':<6} | {'预测得分':>7}")
+    print("-" * 65)
     for rank, (stock_id, score) in enumerate(top_k_stocks.items(), 1):
-        # 打印排名、股票代码和预测得分（保留 4 位小数并带正负号）
-        print(f"  🏆 推荐排名 {rank}: {stock_id:10s} | 模型预测得分 (Expected Return): {score:+.4f}")
-    print("=" * 60)
+        rank_str = f"第{rank:>3} 名"
+        print(f"{rank_str}   |   {stock_id:<8}  | {score:>+10.4f}")
+
+    print("=" * 65)
     print("[*] 提示: 投资有风险，量化模型输出仅供参考，请结合大盘环境谨慎操作。\n")
 
 
