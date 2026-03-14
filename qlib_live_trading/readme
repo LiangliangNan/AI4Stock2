@@ -1,0 +1,15 @@
+完整的 Qlib 实盘（live inference）选股框架，结构接近真实量化系统。
+    - 训练与预测使用同一个 handler
+    - processor 的 fit 参数不会改变
+    - 预测只使用 feature，不使用 label
+    - 每日可以对未来一天进行预测
+核心软件：Microsoft Qlib
+
+一、项目结构
+qlib_live_trading/
+    data/
+    models/
+    train_model.py    训练模型
+    predict_today.py  每日预测
+    update_data.py    更新数据
+    config.py         公共配置

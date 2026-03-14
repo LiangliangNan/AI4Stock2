@@ -159,7 +159,7 @@ def main():
             print("Model saved.")
 
             # === 【新增：保存特征处理器状态】 ===
-            handler_state_path = Path(args.save_model).parent / "handler_state.pkl"
+            handler_state_path = Path(args.save_model).parent / "handler.pkl"
             print(f"Saving handler state to {handler_state_path}...")
             with open(handler_state_path, "wb") as f:
                 import pickle
