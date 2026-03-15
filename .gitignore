@@ -13,8 +13,6 @@
 /mlruns
 /__pycache__
 src/dump_bin.py
-src/data/qlib_data_cn/calendars/day.txt
-src/data/qlib_data_cn/instruments/all.txt
 .DS_Store
 /qlib_live_trading/pipeline/__pycache__
 /qlib_live_trading/system/__pycache__
