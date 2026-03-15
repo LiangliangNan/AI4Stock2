@@ -38,11 +38,11 @@ class SignalEngine:
                 self.model = pickle.load(f)
             # --- [增强点] 如果加载的是 GenericModel 实例且它存过特征名，可以在这里恢复 ---
             # if hasattr(self.model, 'feature_names'): self.feature_names = self.model.feature_names
-            print(f"[*] 已加载 pickle 模型: {model_or_path}")
+            print(f"[*] 已加载模型: {model_or_path} (训练区间: {self.model.train_start} 至 {self.model.train_end})")
         elif isinstance(model_or_path, GenericModel):
             # 直接使用传入的 GenericModel
             self.model = model_or_path
-            print(f"[*] 新创建 GenericModel 实例")
+            print(f"[*] 新创建模型实例")
         else:
             raise TypeError("model_or_path 必须是 str (pickle 文件路径) 或 GenericModel 对象")
 

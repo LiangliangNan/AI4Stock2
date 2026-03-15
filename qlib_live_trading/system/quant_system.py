@@ -32,7 +32,7 @@ class QuantSystem:
     组合构建和回测/实盘流程
     """
 
-    def __init__(self, topk=30):
+    def __init__(self, topk=30, retrain=False):
         # -----------------------------
         # 因子存储
         # -----------------------------
@@ -52,12 +52,12 @@ class QuantSystem:
         # SignalEngine 初始化
         # -----------------------------
         import os
-        if os.path.exists(model_path):
-            print(f"[*] 加载已有模型: {model_path}")
+        if (not retrain) and os.path.exists(model_path):
+            print(f"[*] 加载已有模型: {model_path} ...")
             self.signal = SignalEngine(model_path)
-
         else:
-            print("[*] 未发现训练好的模型，开始训练 LightGBM")
+            if (not retrain):
+                print("[*] 未发现训练好的模型，开始训练 LightGBM")
 
             # 创建模型
             self.signal = SignalEngine(GenericModel("lightgbm"))
@@ -81,13 +81,10 @@ class QuantSystem:
         训练模型并保存
         """
 
-        print("[*] 准备训练数据")
-
-        # 训练区间
+        print(f"[*] 准备训练数据")
         train_start = "1996-01-01"
         train_end = "2023-12-31"
-        print(f"[*] 模型训练用数据起止日期: {train_start} -> {train_end}")
-        print(f"!!!TODO：以后任何回测和预测，判断日期不能与模型训练日期有重叠。调用QuantSystem.check_data_leakage()-----")
+        print(f"[*] 训练数据起止日期: {train_start} -> {train_end}")
 
         # 确保因子存在
         self.ensure_factors(train_start, train_end)
@@ -111,6 +108,8 @@ class QuantSystem:
         # 训练
         # print(f"[*] [DEBUG] system 特征列预览: {list(X.columns[:5])} ...")
         self.signal.fit(X, y)
+        self.signal.model.train_start = train_start
+        self.signal.model.train_end = train_end
 
         print("[*] 模型训练完成")
 
@@ -139,7 +138,7 @@ class QuantSystem:
                 print(f"[*] 增量更新因子: {last_date:%Y-%m-%d} -> {end}")
                 self.factor_engine.update(last_date, end)
 
-    def check_data_leakage(train_start, train_end, test_start, test_end):
+    def check_data_leakage(self, train_start, train_end, test_start, test_end):
         """
         检查训练集和测试集是否存在日期重叠（数据泄露）
         """
@@ -148,12 +147,12 @@ class QuantSystem:
 
         # 判断区间是否有交集
         if not (t_end < v_start or v_end < t_start):
-            print("\n" + "!" * 60)
-            print("严重警告: 发现数据泄露 (Data Leakage)！")
-            print(f"训练区间: {t_start.date()} 至 {t_end.date()}")
-            print(f"测试区间: {v_start.date()} 至 {v_end.date()}")
-            print("原因: 测试日期与训练日期存在重叠。回测结果将严重虚高，无法代表实盘表现！")
-            print("!" * 60 + "\n")
+            print("\n\033[91m" + "!" * 70)
+            print("⚠️ 严重警告: 发现数据泄露 (Data Leakage)！")
+            print(f"      训练区间: {t_start.date()} 至 {t_end.date()}")
+            print(f"      测试区间: {v_start.date()} 至 {v_end.date()}")
+            print(f"      原因: 测试日期与训练日期存在重叠。回测结果将严重虚高，无法代表实盘表现！")
+            print("!" * 70 + "\033[0m\n")
             return True
         return False
 
@@ -163,10 +162,12 @@ class QuantSystem:
     def run_backtest(self, start, end):
         """
         回测主函数
-
         参数：
             start, end: 回测日期区间
         """
+
+        self.check_data_leakage(self.signal.model.train_start, self.signal.model.train_end, start, end)
+
         # 确保因子覆盖
         self.ensure_factors(start, end)
 
@@ -202,6 +203,9 @@ class QuantSystem:
         用 date 日的因子和收盘行情计算每只股票的预测分数（score），然后生成目标组合。
         因为 A 股遵循 T+1 交易规则，所以当天收盘后选出的组合，实际交易在下一交易日执行。
         """
+        print(f"ToDo: check if the date on the trading calendar")
+        self.check_data_leakage(self.signal.model.train_start, self.signal.model.train_end, date, date)
+
         # 确保因子覆盖
         self.ensure_factors(date, date)
 

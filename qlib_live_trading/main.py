@@ -12,7 +12,6 @@ main.py - 简化量化系统入口示例
 目录约定：
 - data/qlib_data_cn/ : Qlib 二进制行情数据目录
 """
-import qlib
 
 import sys
 from pathlib import Path
@@ -29,6 +28,7 @@ if __name__ == "__main__":
     # -----------------------------
     # 初始化 Qlib
     # -----------------------------
+    import qlib
     qlib.init(
         provider_uri="data/qlib_data_cn",
         region="cn"
@@ -38,7 +38,7 @@ if __name__ == "__main__":
     # 1. 初始化量化系统
     # -----------------------------
     # topk: 每日选取前 topk 支持组合构建
-    system = QuantSystem(topk=10)
+    system = QuantSystem(topk=10, retrain=False)
 
     # -----------------------------
     # 2. 回测历史策略
@@ -46,14 +46,14 @@ if __name__ == "__main__":
     # 回测时间段：2024-01-01 ~ 2025-12-31
     # 使用历史因子 + Qlib 行情数据生成策略净值曲线
     # 注意：回测期间无需重新抓取数据，默认使用 data/qlib_data_cn
-    system.run_backtest("2024-01-01", "2025-12-31")
+    system.run_backtest("2025-01-01", "2025-12-31")
 
     # -----------------------------
     # 3. 当日选股（预测下一交易日组合）
     # -----------------------------
     # 以 2025-01-10 的因子和收盘行情计算每只股票预测分数
     # 因为 A 股遵循 T+1 交易规则，当日收盘生成组合，实际交易在下一交易日（2025-01-11）执行
-    portfolio = system.recommend("2025-01-10")
+    portfolio = system.recommend("2026-03-13")
 
     # 输出当日选股组合
     # 可能包含字段：['symbol', 'score', 'rank', 'weight']
