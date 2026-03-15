@@ -18,7 +18,6 @@ project/
 ├─ pipeline/         信号计算和因子处理的核心逻辑
 │  ├─ factor_engine.py     因子计算引擎（Alpha158），支持全量计算和增量更新，避免每天重算全量因子
 │  ├─ factor_store.py      管理因子缓存，避免重复计算。按年分区存储 Alpha158 因子，支持按日期区间读取和增量写入
-│  ├─ neutralize.py        行业中性化工具，可对因子进行行业中性化处理，消除行业偏差，可扩展市值中性化
 │  ├─ portfolio.py         生成组合（Top-K）。支持 TopK 股票选取和等权分配，返回 `{stock: weight}` 字典 
 │  ├─ get_data.py          提供干净的数据源（完成抓取、增量更新、合并、转换到 Qlib 的整个过程）
 │  ├─ model.py             预测模型模块。提供多种可选模型：LightGBM、XGBoost、PyTorch MLP、LSTM、Transformer。提供统一接口 fit/predict
@@ -45,22 +44,17 @@ project/
     - 日常收盘增量更新，只计算缺失日期的因子，避免全量重算
     - 系统自动管理，无需手动调用
 
-2. **行业中性化（Industry Neutralization）**
-    - 使用 `neutralize.industry_neutralize(df, industry_col="industry")`
-    - 消除行业偏差，确保因子在行业间可比
-    - 可选扩展市值中性化：`factor ~ industry + log(market_cap)`，使用回归残差
-
-3. **模型预测（Signal Prediction）**
+2. **模型预测（Signal Prediction）**
     - 使用 `SignalEngine` 对因子数据生成每只股票预测分数 `score`
     - 输出 DataFrame 增加 `score` 列
     - 可直接作为组合构建和回测输入
 
-4. **组合构建（Portfolio Construction）**
+3. **组合构建（Portfolio Construction）**
     - 使用 `PortfolioEngine` 按 TopK 分数构建目标组合
     - 支持行业约束，可等权分配
     - 输出 `{stock: weight}` 字典
 
-5. **回测 / 实盘选股（Backtest / Live Recommendation）**
+4. **回测 / 实盘选股（Backtest / Live Recommendation）**
     - 回测使用 `BacktestEngine`，考虑涨跌停、停牌、T+1、交易费用、滑点等真实交易条件
     - 支持绘制收益曲线（有交易费用 vs 无交易费用）
     - 实盘选股直接调用 `recommend(date)` 返回当天目标组合

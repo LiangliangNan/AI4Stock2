@@ -15,3 +15,4 @@ src/dump_bin.py
 .DS_Store
 /qlib_live_trading/pipeline/__pycache__
 /qlib_live_trading/system/__pycache__
+/qlib_live_trading/data

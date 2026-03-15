@@ -12,6 +12,7 @@ main.py - 简化量化系统入口示例
 目录约定：
 - data/qlib_data_cn/ : Qlib 二进制行情数据目录
 """
+import qlib
 
 import sys
 from pathlib import Path
@@ -20,26 +21,32 @@ sys.path.append(str(Path(__file__).resolve().parent))
 sys.path.append(str(Path(__file__).resolve().parent / "pipeline"))
 sys.path.append(str(Path(__file__).resolve().parent / "system"))
 
-from quant_system import QuantSystem
+from system.quant_system import QuantSystem
 import pandas as pd
 
 
 if __name__ == "__main__":
+    # -----------------------------
+    # 初始化 Qlib
+    # -----------------------------
+    qlib.init(
+        provider_uri="data/qlib_data_cn",
+        region="cn"
+    )
 
     # -----------------------------
     # 1. 初始化量化系统
     # -----------------------------
     # topk: 每日选取前 topk 支持组合构建
-    # neutralize: 是否对因子进行行业或风格中性化处理
-    system = QuantSystem(topk=30, neutralize=True)
+    system = QuantSystem(topk=30)
 
     # -----------------------------
     # 2. 回测历史策略
     # -----------------------------
-    # 回测时间段：2022-01-01 ~ 2024-12-31
+    # 回测时间段：2024-01-01 ~ 2025-12-31
     # 使用历史因子 + Qlib 行情数据生成策略净值曲线
     # 注意：回测期间无需重新抓取数据，默认使用 data/qlib_data_cn
-    system.run_backtest("2022-01-01", "2024-12-31")
+    system.run_backtest("2025-11-01", "2025-12-31")
 
     # -----------------------------
     # 3. 当日选股（预测下一交易日组合）

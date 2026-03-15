@@ -46,15 +46,15 @@ class FactorStore:
         return df
 
     def save(self, df):
-        df = df.copy()
-        df["year"] = df.index.get_level_values(0).year
+        # 确保 datetime 是 datetime 类型
+        dates = pd.to_datetime(df.index.get_level_values("datetime"))
+        df["year"] = dates.year
+        for year, g in df.groupby("year"):
+            path = self.root / f"{year}.parquet"
+            if path.exists():
+                old = pd.read_parquet(path)
+                g = pd.concat([old, g]).drop_duplicates()
 
-        for y, g in df.groupby("year"):
-            f = self.file(y)
-            if f.exists():
-                old = pd.read_parquet(f)
-                g = pd.concat([old, g], ignore_index=False)
-                g = g[~g.index.duplicated(keep='last')]
-            g.to_parquet(f)
-            print(f"[+] 因子数据已保存: {f} (共 {len(g)} 行)")
+            g.to_parquet(path)
+            print(f"[+] 因子数据已保存: {path} (共 {len(g)} 行)")
 

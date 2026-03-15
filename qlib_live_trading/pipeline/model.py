@@ -131,13 +131,24 @@ class GenericModel:
         lr : float
             PyTorch 学习率
         """
-        X_np = X.values if isinstance(X, pd.DataFrame) else X
-        y_np = y.values if isinstance(y, (pd.Series, pd.DataFrame)) else y
-
+        # --- [修改点] 增加针对树模型的特殊处理和调试打印 ---
         if self.model_type in ["lightgbm", "xgboost"]:
-            self.model.fit(X_np, y_np)
+            if isinstance(X, pd.DataFrame):
+                print(f"[*] [FIT] 使用 DataFrame 训练 {self.model_type}, 形状: {X.shape}")
+                null_count = X.isnull().sum().sum()
+                if null_count > 0:
+                    print(f"[!] [FIT] 警告: 训练集中存在 {null_count} 个缺失值")
+            self.model.fit(X, y)
+        # -----------------------------------------------
         else:
-            # PyTorch 模型
+            # PyTorch 模型逻辑
+            X_np = X.values if isinstance(X, pd.DataFrame) else X
+            y_np = y.values if isinstance(y, (pd.Series, pd.DataFrame)) else y
+
+            # --- [修改点] 增加深度学习数据的统计打印 ---
+            print(f"[*] [FIT] 训练 {self.model_type}, 特征均值: {np.mean(X_np):.4f}, 标准差: {np.std(X_np):.4f}")
+            # ---------------------------------------
+
             input_dim = X_np.shape[1]
             if self.model_type == "mlp":
                 self.model = MLPModel(input_dim, **self.kwargs)
@@ -168,27 +179,33 @@ class GenericModel:
     def predict(self, X: Union[pd.DataFrame, np.ndarray]) -> np.ndarray:
         """
         预测分数
-
-        参数
-        ----
-        X : pd.DataFrame 或 np.ndarray
-            特征矩阵
-
-        返回
-        ----
-        np.ndarray
-            一维预测分数
         """
-        X_np = X.values if isinstance(X, pd.DataFrame) else X
+        # --- 调试打印保持不变 ---
+        if isinstance(X, pd.DataFrame):
+            print(f"[*] [PREDICT] 特征列预览: {list(X.columns[:5])} ...")
+            inf_count = np.isinf(X.values).sum()
+            if inf_count > 0:
+                print(f"[!] [PREDICT] 警告: 输入包含 {inf_count} 个 Inf 值")
+
+        # --- 修复逻辑：增加对 pickle 加载后的兼容性检查 ---
+        if self.model is None:
+            raise ValueError("模型未初始化或未加载，请检查 pickle 文件内容。")
 
         if self.model_type in ["lightgbm", "xgboost"]:
-            return self.model.predict(X_np)
+            # 如果是树模型，直接调用底层模型的 predict
+            # 即使是通过 pickle 加载的，只要 self.model 是真正的 LGBM 对象就行
+            preds = self.model.predict(X)
         else:
+            # PyTorch 逻辑保持不变
+            X_np = X.values if isinstance(X, pd.DataFrame) else X
             if self.model_type in ["lstm", "transformer"]:
-                X_np = X_np[:, np.newaxis, :]  # (batch, seq_len=1, feature)
+                X_np = X_np[:, np.newaxis, :]
             self.model.eval()
             with torch.no_grad():
-                return self.model(torch.tensor(X_np, dtype=torch.float32)).numpy()
+                preds = self.model(torch.tensor(X_np, dtype=torch.float32)).numpy()
+
+        print(f"[*] [PREDICT] 结果分布: Max={np.max(preds):.4f}, Min={np.min(preds):.4f}, Mean={np.mean(preds):.4f}")
+        return preds
 
 
 

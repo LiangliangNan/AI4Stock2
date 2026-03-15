@@ -6,7 +6,6 @@ portfolio.py: 目标组合生成模块（不涉及交易执行）
     支持：
         - TopK 股票选取
         - 等权分配（可后续拓展加权）
-        - 可结合行业中性化处理的分数
 """
 
 import pandas as pd
@@ -41,15 +40,30 @@ class PortfolioEngine:
             value = 模型预测分数（越高优先选入组合）
         返回
         ----
-        dict
-            {股票代码: 权重}，默认等权分配
+        pd.DataFrame
+            包含 score, weight, rank 的明细表
         """
-
         # 按分数排序，分数高的优先选
         ranked = scores.sort_values(ascending=False)
+
         # 取 TopK
         selected = ranked.head(self.topk)
+
+        # 容错处理：如果当天没有预测出数据
+        if selected.empty:
+            return pd.DataFrame()
+
         # 等权分配
         weight = 1.0 / len(selected)
-        portfolio = {s: weight for s in selected.index}
-        return portfolio
+
+        # 构建一个直观的 DataFrame 表格
+        portfolio_df = pd.DataFrame({
+            "score": selected,
+            "weight": weight
+        })
+
+        # 增加一个排名列，方便实盘查看
+        portfolio_df["rank"] = range(1, len(selected) + 1)
+        portfolio_df.index.name = "symbol"
+
+        return portfolio_df

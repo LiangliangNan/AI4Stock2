@@ -1,56 +1,124 @@
 """
-# system.py: 主系统（工业级量化流水线）
+# quant_system.py: 主系统（工业级量化流水线）
 
 功能：
-    实现 Alpha158 工业级因子计算 + 行业中性化 + 模型预测 + TopK组合 + 回测/实盘选股
+    实现 Alpha158 工业级因子计算 + 模型预测 + TopK组合 + 回测/实盘选股
 
 特点：
     - 自动增量因子更新，无需手动调用 update_factors()
     - 回测/实盘统一流水线
     - 涨跌停、停牌、T+1、交易费用真实模拟
-    - 支持行业中性化
 
-五步流水线：
+四步流水线：
 1. 因子更新（自动）
-2. 行业中性化（可选）
-3. 模型预测
-4. 组合构建（TopK）
-5. 回测/实盘选股
+2. 模型预测
+3. 组合构建（TopK）
+4. 回测/实盘选股
 """
 
+import pandas as pd
 from factor_store import FactorStore
 from factor_engine import FactorEngine
-from neutralize import industry_neutralize
+from model import GenericModel
 from signal_engine import SignalEngine
 from portfolio import PortfolioEngine
 from backtest import BacktestEngine
-
 
 class QuantSystem:
     """
     QuantSystem 工业级量化系统
 
-    自动管理因子存储、增量更新、行业中性化、模型预测、组合构建和回测/实盘流程
+    自动管理因子存储、增量更新、模型预测、
+    组合构建和回测/实盘流程
     """
 
-    def __init__(self, topk=30, neutralize=True):
+    def __init__(self, topk=30):
+        # -----------------------------
         # 因子存储
+        # -----------------------------
         self.store = FactorStore()
 
+        # -----------------------------
         # 因子计算引擎
+        # -----------------------------
         self.factor_engine = FactorEngine()
 
-        # 模型预测
-        self.signal = SignalEngine("models/model.pkl")
+        # -----------------------------
+        # 模型路径
+        # -----------------------------
+        model_path = "models/lightgbm.pkl"
 
+        # -----------------------------
+        # SignalEngine 初始化
+        # -----------------------------
+        import os
+        if os.path.exists(model_path):
+            print(f"[*] 加载已有模型: {model_path}")
+            self.signal = SignalEngine(model_path)
+
+        else:
+            print("[*] 未发现训练好的模型，开始训练 LightGBM")
+
+            # 创建模型
+            self.signal = SignalEngine(GenericModel("lightgbm"))
+
+            # 训练并保存模型
+            self._train_and_save_model(model_path)
+
+        # -----------------------------
         # 组合构建
+        # -----------------------------
         self.portfolio = PortfolioEngine(topk=topk)
 
+        # -----------------------------
         # 回测引擎
-        self.backtest = BacktestEngine(topk=topk,
-                                       neutralize_func=industry_neutralize if neutralize else None)
+        # -----------------------------
+        self.backtest = BacktestEngine(topk=topk)
 
-        self.neutralize = neutralize
+
+    def _train_and_save_model(self, model_path):
+        """
+        训练模型并保存
+        """
+
+        print("[*] 准备训练数据")
+
+        # 训练区间
+        train_start = "1996-01-01"
+        train_end = "2023-12-31"
+        print(f"模型训练用数据起止日期: {train_start} -> {train_end}")
+        print(f"TODO：以后任何回测和预测，判断日期不能与模型训练日期有重叠-----")
+
+        # 确保因子存在
+        self.ensure_factors(train_start, train_end)
+
+        # 读取因子
+        df = self.store.load_range(train_start, train_end)
+
+        if df.empty:
+            raise RuntimeError("训练数据为空")
+
+        # 特征列
+        exclude_cols = {"LABEL0", "year", "score"}
+        features = [c for c in df.columns if c not in exclude_cols]
+
+        X = df[features]
+        y = df["LABEL0"]
+
+        print(f"[*] 训练样本: {len(X)}")
+        print(f"[*] 因子数量: {len(features)}")
+
+        # 训练
+        print(f"[*] [PREDICT] system 特征列预览: {list(X.columns[:5])} ...")
+        self.signal.fit(X, y)
+
+        print("[*] 模型训练完成")
+
+        # 保存模型
+        import os
+        os.makedirs("models", exist_ok=True)
+        self.signal.save_model(model_path)
+
 
     # ----------------------------------------
     # 因子检查 & 增量更新
@@ -120,19 +188,48 @@ class QuantSystem:
         return portfolio
 
 
+"""
 # --------------------------------------------
 # Usage 示例
 # --------------------------------------------
 if __name__ == "__main__":
-    import pandas as pd
+    # -----------------------------
+    # 初始化 Qlib
+    # -----------------------------
+    qlib.init(
+        provider_uri="data/qlib_data_cn",
+        region="cn"
+    )
 
-    system = QuantSystem(topk=30, neutralize=True)
+    # -----------------------------
+    # 1. 初始化量化系统
+    # -----------------------------
+    # topk: 每日选取前 topk 支持组合构建
+    system = QuantSystem(topk=30)
 
-    # 回测 2022-01-01 ~ 2024-12-31
-    system.run_backtest("2022-01-01", "2024-12-31")
+    # -----------------------------
+    # 2. 回测历史策略
+    # -----------------------------
+    # 回测时间段：2024-01-01 ~ 2025-12-31
+    # 使用历史因子 + Qlib 行情数据生成策略净值曲线
+    # 注意：回测期间无需重新抓取数据，默认使用 data/qlib_data_cn
+    system.run_backtest("2024-01-01", "2025-12-31")
 
-    # 当日选股 2025-01-10
-    # 用2025-01-10的因子和收盘行情计算每只股票的预测分数，然后生成目标组合。
-    # 因为 A 股遵循 T+1 交易规则，所以当天收盘后选出的组合，实际交易会在 下一交易日（2025-01-11） 执行。
+    # -----------------------------
+    # 3. 当日选股（预测下一交易日组合）
+    # -----------------------------
+    # 以 2025-01-10 的因子和收盘行情计算每只股票预测分数
+    # 因为 A 股遵循 T+1 交易规则，当日收盘生成组合，实际交易在下一交易日（2025-01-11）执行
     portfolio = system.recommend("2025-01-10")
+
+    # 输出当日选股组合
+    # 可能包含字段：['symbol', 'score', 'rank', 'weight']
     print(portfolio)
+
+    # -----------------------------
+    # 4. 后续操作建议
+    # -----------------------------
+    # 1) 可将 portfolio 保存为 CSV，供实盘交易系统使用
+    # 2) 可循环多日生成连续组合
+    # 3) 回测结果与实盘使用同一套接口，保证策略一致性
+"""
