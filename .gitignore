@@ -1,7 +1,6 @@
 .idea
 /src/__pycache__
 /data/processed/combined
-/data/processed/combined
 /data/qlib_data_cn
 /data/raw
 /src/data/processed
