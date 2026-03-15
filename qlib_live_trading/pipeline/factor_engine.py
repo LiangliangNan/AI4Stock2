@@ -32,12 +32,13 @@ class FactorEngine:
     Alpha158 incremental factor engine
     """
 
-    def __init__(self):
+    def __init__(self, instruments="main_board"):
         self.store = FactorStore()
+        self.instruments = instruments
 
     def compute_range(self, start, end):
         handler = Alpha158(
-            instruments="csi300",
+            instruments=self.instruments,
             start_time=start,
             end_time=end,
             fit_start_time=start,

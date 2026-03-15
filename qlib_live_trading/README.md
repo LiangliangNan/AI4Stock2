@@ -6,17 +6,28 @@
 
 ---
 
-## 系统模块
-
-| 模块 | 功能说明 |
-|------|---------|
-| `factor_store.py` | 因子存储（Parquet），按年分区存储 Alpha158 因子，支持按日期区间读取和增量写入 |
-| `factor_engine.py` | 因子计算引擎（Alpha158），支持全量计算和增量更新，避免每天重算全量因子 |
-| `neutralize.py` | 行业中性化工具，可对因子进行行业中性化处理，消除行业偏差，可扩展市值中性化 |
-| `signal_engine.py` | 模型预测，引入训练好的模型对因子生成每日预测分数 (`score`) |
-| `portfolio.py` | 组合构建模块，支持 TopK 股票选取和等权分配，返回 `{stock: weight}` 字典 |
-| `backtest.py` | 工业级回测引擎，支持涨跌停、停牌、T+1、交易费用、滑点、行业中性化 |
-| `system.py` | 主系统，整合以上模块，实现完整流水线及回测/实盘统一接口 |
+## 系统模块及功能说明
+```text
+project/
+├─ data/             数据层
+│  ├─ raw/              抓取的原始数据
+│  │  ├─ daily/            AkShare 抓取的 HFQ 日线行情 parquet
+│  │  └─ valuation/        AkShare 抓取的估值 parquet（PE、PB、流通市值等）
+│  ├─ processed/           daily + valuation + industry 列合并后的 parquet
+│  └─ qlib_data_cn/        Qlib 二进制数据（dump_bin 生成，用于模型训练/回测/推荐）
+├─ pipeline/         信号计算和因子处理的核心逻辑
+│  ├─ factor_engine.py     因子计算引擎（Alpha158），支持全量计算和增量更新，避免每天重算全量因子
+│  ├─ factor_store.py      管理因子缓存，避免重复计算。按年分区存储 Alpha158 因子，支持按日期区间读取和增量写入
+│  ├─ neutralize.py        行业中性化工具，可对因子进行行业中性化处理，消除行业偏差，可扩展市值中性化
+│  ├─ portfolio.py         生成组合（Top-K）。支持 TopK 股票选取和等权分配，返回 `{stock: weight}` 字典 
+│  ├─ get_data.py          提供干净的数据源（完成抓取、增量更新、合并、转换到 Qlib 的整个过程）
+│  ├─ model.py             预测模型模块。提供多种可选模型：LightGBM、XGBoost、PyTorch MLP、LSTM、Transformer。提供统一接口 fit/predict
+│  └─ signal_engine.py     模型预测，引入训练好的模型对因子生成每日预测分数 (`score`) 
+├─ system/           策略执行和回测，与数据源分离
+│  ├─ backtest.py          工业级回测引擎，支持涨跌停、停牌、T+1、交易费用、滑点、行业中性化、生成净值曲线、指标报告
+│  └─ quant_system.py      主系统，整合以上模块，实现完整流水线及回测/实盘统一接口
+└─ main.py
+```
 
 ---
 
