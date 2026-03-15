@@ -85,7 +85,7 @@ class QuantSystem:
 
         # 训练区间
         train_start = "1996-01-01"
-        train_end = "2025-12-31"
+        train_end = "2023-12-31"
         print(f"[*] 模型训练用数据起止日期: {train_start} -> {train_end}")
         print(f"!!!TODO：以后任何回测和预测，判断日期不能与模型训练日期有重叠。调用QuantSystem.check_data_leakage()-----")
 
