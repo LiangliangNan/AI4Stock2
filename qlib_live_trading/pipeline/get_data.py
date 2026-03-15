@@ -178,7 +178,7 @@ def merge_and_save(symbol):
     df.to_parquet(processed_file, index=False)
     return True
 
-def collect_all(symbols=None, max_workers=8):
+def collect_all(symbols=None, max_workers=4):
     """
     多线程抓取/更新全市场数据
     """
