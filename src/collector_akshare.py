@@ -332,7 +332,7 @@ if __name__ == "__main__":
         # python src/collector_akshare.py --update --convert --workers 4
         args.update = True
         args.convert = True
-        args.workers = 4
+        args.workers = 1
     #     # -----------------------------------------------------------
     #     # Fetch all A - shares
     #     args.all = True

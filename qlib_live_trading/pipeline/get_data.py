@@ -67,10 +67,14 @@ def fetch_stock_list():
     获取 A 股主板股票列表（00/60 开头）
     返回列表：['600000', '600004', ...]
     """
-    print("[*] 获取主板股票列表...")
-    df = ak.stock_zh_a_spot_em()
-    df = df[df["代码"].str.match(r"^(00|60)")]
-    return df["代码"].tolist()
+    try:
+        print("[*] 获取主板股票列表...")
+        df = ak.stock_zh_a_spot_em()
+        df = df[df["代码"].str.match(r"^(00|60)")]
+        return df["代码"].tolist()
+    except Exception as e:
+        print(f"[!] Error fetching stock list: {e}")
+        exit(1)
 
 # ----------------------------
 # 数据抓取函数
