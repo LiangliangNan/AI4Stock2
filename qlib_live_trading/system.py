@@ -1,101 +1,138 @@
-# system_backtest.py
-import pandas as pd
-import pickle
-from qlib.backtest import backtest as qlbt
-from qlib.backtest.executor import SimulatorExecutor
-from qlib.contrib.strategy import TopkDropoutStrategy
-from qlib.data.dataset import DatasetH
-from pathlib import Path
+"""
+# system.py: 主系统（工业级量化流水线）
+
+功能：
+    实现 Alpha158 工业级因子计算 + 行业中性化 + 模型预测 + TopK组合 + 回测/实盘选股
+
+特点：
+    - 自动增量因子更新，无需手动调用 update_factors()
+    - 回测/实盘统一流水线
+    - 涨跌停、停牌、T+1、交易费用真实模拟
+    - 支持行业中性化
+
+五步流水线：
+1. 因子更新（自动）
+2. 行业中性化（可选）
+3. 模型预测
+4. 组合构建（TopK）
+5. 回测/实盘选股
+"""
+
+from factor_store import FactorStore
+from factor_engine import FactorEngine
+from neutralize import industry_neutralize
+from signal_engine import SignalEngine
+from portfolio import PortfolioEngine
+from backtest import BacktestEngine
+
 
 class QuantSystem:
-    def __init__(self, model, handler):
-        self.model = model
-        self.handler = handler
+    """
+    QuantSystem 工业级量化系统
 
-    def build_dataset(self, start, end):
-        """构建 DatasetH 对象，用于回测或预测"""
-        segments = {"test": (start, end)}
-        dataset = DatasetH(handler=self.handler, segments=segments, col_set="feature")
-        return dataset
+    自动管理因子存储、增量更新、行业中性化、模型预测、组合构建和回测/实盘流程
+    """
 
-    def run_backtest(self, start="2025-01-01", end=None, topk=20, n_drop=0):
-        """回测整个区间"""
-        end = end or pd.Timestamp.today().strftime("%Y-%m-%d")
-        print(f"[*] 回测时间区间: {start} ~ {end}")
+    def __init__(self, topk=30, neutralize=True):
+        # 因子存储
+        self.store = FactorStore()
 
-        dataset = self.build_dataset(start, end)
+        # 因子计算引擎
+        self.factor_engine = FactorEngine()
 
-        # 1️⃣ 模型预测
-        print("[*] 正在生成预测信号...")
-        preds = self.model.predict(dataset)
-        if preds.empty:
-            raise ValueError("[!] 错误：预测结果为空")
+        # 模型预测
+        self.signal = SignalEngine("models/model.pkl")
 
-        dataset.df["score"] = preds.iloc[:, 0]  # 预测信号列
+        # 组合构建
+        self.portfolio = PortfolioEngine(topk=topk)
 
-        # 2️⃣ 配置策略
-        strategy = TopkDropoutStrategy(topk=topk, n_drop=n_drop, predict_score="score")
+        # 回测引擎
+        self.backtest = BacktestEngine(topk=topk,
+                                       neutralize_func=industry_neutralize if neutralize else None)
 
-        # 3️⃣ 配置执行器
-        executor = SimulatorExecutor()
-        print("[*] 正在执行回测...")
-        account_df, trades_df = qlbt(
-            dataset.df,
-            strategy=strategy,
-            executor=executor
-        )
+        self.neutralize = neutralize
 
-        print("[*] 回测完成")
-        return account_df, trades_df
+    # ----------------------------------------
+    # 因子检查 & 增量更新
+    # ----------------------------------------
+    def ensure_factors(self, start, end):
+        """
+        检查因子是否存在，缺失则自动增量更新
+        """
+        df = self.store.load_range(start, end)
+        if df.empty:
+            print("[*] 因子缺失，自动计算因子")
+            self.factor_engine.update(start, end)
+        else:
+            # 检查最后日期是否覆盖
+            last_date = df.index.get_level_values(0).max()
+            if pd.Timestamp(last_date) < pd.Timestamp(end):
+                print(f"[*] 增量更新因子: {last_date} -> {end}")
+                self.factor_engine.update(last_date, end)
 
-    def recommend_today(self, topk=20, n_drop=0):
-        """收盘后生成今日推荐股票"""
-        latest_day = pd.Timestamp.today().strftime("%Y-%m-%d")
-        lookback_days = 100
-        calendar = self.handler.calendar
-        inference_start_day = calendar[-lookback_days].strftime("%Y-%m-%d")
+    # ----------------------------------------
+    # 回测
+    # ----------------------------------------
+    def run_backtest(self, start, end):
+        """
+        回测主函数
 
-        dataset = self.build_dataset(start=inference_start_day, end=latest_day)
+        参数：
+            start, end: 回测日期区间
+        """
+        # 确保因子覆盖
+        self.ensure_factors(start, end)
 
-        print(f"[*] 生成 {latest_day} 收盘后推荐信号...")
-        preds = self.model.predict(dataset)
-        if preds.empty:
-            print("[!] 错误：预测结果为空")
-            return pd.DataFrame()
+        # 读取因子
+        df = self.store.load_range(start, end)
 
-        # 取最新一天预测
-        actual_latest_date = preds.index.get_level_values(0).max()
-        latest_preds = preds.loc[actual_latest_date].copy()
-        latest_preds["score"] = latest_preds.iloc[:, 0]
+        # 预测
+        df = self.signal.predict(df)
 
-        # 排序 topk
-        recommended = latest_preds.sort_values("score", ascending=False).head(topk)
-        print(f"[✅] 今日推荐前 {topk} 股票：")
-        print(recommended[["score"]])
-        return recommended
+        # 回测
+        result = self.backtest.run(df, self.portfolio)
+        self.backtest.plot(result)
+        return result
 
-# ===== Usage =====
+    # ----------------------------------------
+    # 实盘选股
+    # ----------------------------------------
+    def recommend(self, date):
+        """
+        返回指定交易日的目标组合
+        用 date 日的因子和收盘行情计算每只股票的预测分数（score），然后生成目标组合。
+        因为 A 股遵循 T+1 交易规则，所以当天收盘后选出的组合，实际交易在下一交易日执行。
+        """
+        # 确保因子覆盖
+        self.ensure_factors(date, date)
+
+        # 读取因子
+        df = self.store.load_range(date, date)
+
+        # 预测
+        df = self.signal.predict(df)
+
+        # 提取当天分数
+        scores = df.loc[date]["score"]
+
+        # 构建目标组合
+        portfolio = self.portfolio.build_target_portfolio(scores)
+        return portfolio
+
+
+# --------------------------------------------
+# Usage 示例
+# --------------------------------------------
 if __name__ == "__main__":
-    # 1️⃣ 加载模型与 handler
-    model_path = Path("results/lgbm/model.pkl")
-    handler_path = Path("results/lgbm/handler.pkl")
-    model = pickle.load(open(model_path, "rb"))
-    handler = pickle.load(open(handler_path, "rb"))
+    import pandas as pd
 
-    qs = QuantSystem(model, handler)
+    system = QuantSystem(topk=30, neutralize=True)
 
-    # 2️⃣ 回测示例
-    account_df, trades_df = qs.run_backtest(
-        start="2025-01-01",
-        end="2025-03-10",
-        topk=30,
-        n_drop=5
-    )
-    print("[回测账户余额示例]")
-    print(account_df.head())
-    print("[回测交易记录示例]")
-    print(trades_df.head())
+    # 回测 2022-01-01 ~ 2024-12-31
+    system.run_backtest("2022-01-01", "2024-12-31")
 
-    # 3️⃣ 收盘后今日推荐
-    today_recommendation = qs.recommend_today(topk=20, n_drop=0)
-    print(today_recommendation)
+    # 当日选股 2025-01-10
+    # 用2025-01-10的因子和收盘行情计算每只股票的预测分数，然后生成目标组合。
+    # 因为 A 股遵循 T+1 交易规则，所以当天收盘后选出的组合，实际交易会在 下一交易日（2025-01-11） 执行。
+    portfolio = system.recommend("2025-01-10")
+    print(portfolio)

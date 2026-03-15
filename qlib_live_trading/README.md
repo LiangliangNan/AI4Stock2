@@ -1,35 +1,107 @@
-完整的 Qlib 实盘（live inference）选股框架，结构接近真实量化系统。
-    - 训练与预测使用同一个 handler
-    - processor 的 fit 参数不会改变
-    - 预测只使用 feature，不使用 label
-    - 每日可以对未来一天进行预测
-核心软件：Microsoft Qlib
+# QuantSystem 工业级 A股量化交易系统
 
-一、项目结构
-qlib_live_trading/
-    data/
-    models/
-    train_model.py    训练模型（只偶尔运行。滚动训练：每月或每周重新训练）
-    predict_today.py  每日预测
-    update_data.py    更新数据
-    config.py         公共配置
+## 概述
+本系统实现了一个完整的 A 股量化交易流水线，基于 **Alpha158 因子**，支持 **增量因子更新、行业中性化、模型预测、TopK组合构建、机构级回测/实盘选股**。  
+设计目标是工业级可靠性，兼顾速度和准确性，适合科研、策略开发和模拟实盘验证。
 
-二、每日运行流程
-每天收盘后：
-    - Step1 更新行情
-    - Step2 运行预测脚本
-    - Step3 输出第二天买入列表
+---
 
-执行：
+## 系统模块
 
-python predict_today.py
+| 模块 | 功能说明 |
+|------|---------|
+| `factor_store.py` | 因子存储（Parquet），按年分区存储 Alpha158 因子，支持按日期区间读取和增量写入 |
+| `factor_engine.py` | 因子计算引擎（Alpha158），支持全量计算和增量更新，避免每天重算全量因子 |
+| `neutralize.py` | 行业中性化工具，可对因子进行行业中性化处理，消除行业偏差，可扩展市值中性化 |
+| `signal_engine.py` | 模型预测，引入训练好的模型对因子生成每日预测分数 (`score`) |
+| `portfolio.py` | 组合构建模块，支持 TopK 股票选取和等权分配，返回 `{stock: weight}` 字典 |
+| `backtest.py` | 工业级回测引擎，支持涨跌停、停牌、T+1、交易费用、滑点、行业中性化 |
+| `system.py` | 主系统，整合以上模块，实现完整流水线及回测/实盘统一接口 |
 
+---
 
-输出：
+## 五步完整流水线
 
-Tomorrow Buy List
+1. **因子更新（Factor Update）**
+    - 使用 `FactorEngine` + `FactorStore`
+    - 第一次运行会生成全量历史因子（按年分区 Parquet）
+        ```
+        data/factors/alpha158/
+            2018.parquet
+            2019.parquet
+            ...
+        ```
+    - 日常收盘增量更新，只计算缺失日期的因子，避免全量重算
+    - 系统自动管理，无需手动调用
 
-SH600519
-SZ000858
-SH600036
-...
+2. **行业中性化（Industry Neutralization）**
+    - 使用 `neutralize.industry_neutralize(df, industry_col="industry")`
+    - 消除行业偏差，确保因子在行业间可比
+    - 可选扩展市值中性化：`factor ~ industry + log(market_cap)`，使用回归残差
+
+3. **模型预测（Signal Prediction）**
+    - 使用 `SignalEngine` 对因子数据生成每只股票预测分数 `score`
+    - 输出 DataFrame 增加 `score` 列
+    - 可直接作为组合构建和回测输入
+
+4. **组合构建（Portfolio Construction）**
+    - 使用 `PortfolioEngine` 按 TopK 分数构建目标组合
+    - 支持行业约束，可等权分配
+    - 输出 `{stock: weight}` 字典
+
+5. **回测 / 实盘选股（Backtest / Live Recommendation）**
+    - 回测使用 `BacktestEngine`，考虑涨跌停、停牌、T+1、交易费用、滑点等真实交易条件
+    - 支持绘制收益曲线（有交易费用 vs 无交易费用）
+    - 实盘选股直接调用 `recommend(date)` 返回当天目标组合
+
+---
+
+## 安装与依赖
+
+```bash
+pip install qlib pandas matplotlib pyarrow scikit-learn
+```
+
+---
+
+## Usage 示例
+
+```python
+import pandas as pd
+from system import QuantSystem
+
+# 初始化系统
+system = QuantSystem(topk=30, neutralize=True)
+
+# 回测
+# 系统会自动检查因子数据，并进行增量计算
+result = system.run_backtest(start="2022-01-01", end="2024-12-31")
+
+# 当日选股
+# 获取指定交易日目标组合
+portfolio = system.recommend("2025-01-10")
+print(portfolio)
+```
+
+---
+
+## 性能参考（真实量化系统水平）
+
+| 任务                  | 耗时      |
+|----------------------|----------|
+| Alpha158 全市场计算    | 8-20 min |
+| 因子增量更新           | 1-3 sec  |
+| 全市场预测             | 0.2 sec  |
+| 回测 5 年              | 3-10 sec |
+
+---
+
+## 注意事项
+
+1. 系统默认使用 **CSI300 股票池**，可根据需要修改 `FactorEngine` 中的 `instruments`。
+2. 行业中性化可选，如果不需要设置 `QuantSystem(neutralize=False)`。
+3. 回测与实盘使用同一套函数接口，确保策略一致性。
+4. 回测输出两条曲线：
+   - **无交易费用**：理想净值增长
+   - **考虑交易费用**：真实换手成本净值
+5. 建议在 **Python 3.12 + 最新 Qlib** 环境下运行，确保 **NumPy 2.x** 兼容。
