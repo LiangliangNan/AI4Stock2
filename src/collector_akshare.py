@@ -352,7 +352,7 @@ if __name__ == "__main__":
     parser.add_argument("--workers", type=int, default=4)
     args = parser.parse_args()
 
-    # ===== DEBUG MODE (for PyCharm) =====
+    # ===== DEBUG MODE (for PyCharm) ==================================================
     if True:  # change to False when using CLI
         # -----------------------------------------------------------
         # Fetch specific stocks
@@ -363,7 +363,7 @@ if __name__ == "__main__":
         # python src/collector_akshare.py --update --convert --workers 4
         args.update = True
         args.convert = True
-        args.workers = 8
+        args.workers = 4
     #     # -----------------------------------------------------------
     #     # Fetch all A - shares
     #     args.all = True
@@ -380,6 +380,7 @@ if __name__ == "__main__":
     #     # Convert to Qlib
     #     args.convert = True
     #     # -----------------------------------------------------------
+    # ===== DEBUG MODE (for PyCharm) ==================================================
 
     if args.all or args.symbols or args.update:
         patcher = RequestPatcher()
