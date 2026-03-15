@@ -85,9 +85,9 @@ class QuantSystem:
 
         # 训练区间
         train_start = "1996-01-01"
-        train_end = "2023-12-31"
-        print(f"模型训练用数据起止日期: {train_start} -> {train_end}")
-        print(f"TODO：以后任何回测和预测，判断日期不能与模型训练日期有重叠-----")
+        train_end = "2025-12-31"
+        print(f"[*] 模型训练用数据起止日期: {train_start} -> {train_end}")
+        print(f"!!!TODO：以后任何回测和预测，判断日期不能与模型训练日期有重叠。调用QuantSystem.check_data_leakage()-----")
 
         # 确保因子存在
         self.ensure_factors(train_start, train_end)
@@ -109,7 +109,7 @@ class QuantSystem:
         print(f"[*] 因子数量: {len(features)}")
 
         # 训练
-        print(f"[*] [PREDICT] system 特征列预览: {list(X.columns[:5])} ...")
+        # print(f"[*] [DEBUG] system 特征列预览: {list(X.columns[:5])} ...")
         self.signal.fit(X, y)
 
         print("[*] 模型训练完成")
@@ -135,8 +135,27 @@ class QuantSystem:
             # 检查最后日期是否覆盖
             last_date = df.index.get_level_values(0).max()
             if pd.Timestamp(last_date) < pd.Timestamp(end):
-                print(f"[*] 增量更新因子: {last_date} -> {end}")
+                # 使用 :%Y-%m-%d 格式化 Timestamp 对象
+                print(f"[*] 增量更新因子: {last_date:%Y-%m-%d} -> {end}")
                 self.factor_engine.update(last_date, end)
+
+    def check_data_leakage(train_start, train_end, test_start, test_end):
+        """
+        检查训练集和测试集是否存在日期重叠（数据泄露）
+        """
+        t_start, t_end = pd.Timestamp(train_start), pd.Timestamp(train_end)
+        v_start, v_end = pd.Timestamp(test_start), pd.Timestamp(test_end)
+
+        # 判断区间是否有交集
+        if not (t_end < v_start or v_end < t_start):
+            print("\n" + "!" * 60)
+            print("严重警告: 发现数据泄露 (Data Leakage)！")
+            print(f"训练区间: {t_start.date()} 至 {t_end.date()}")
+            print(f"测试区间: {v_start.date()} 至 {v_end.date()}")
+            print("原因: 测试日期与训练日期存在重叠。回测结果将严重虚高，无法代表实盘表现！")
+            print("!" * 60 + "\n")
+            return True
+        return False
 
     # ----------------------------------------
     # 回测
@@ -159,7 +178,19 @@ class QuantSystem:
 
         # 回测
         result = self.backtest.run(df, self.portfolio)
+
+        # 计算有成本的各项指标
+        metrics = self.backtest.analyze_performance(result["equity_cost"])
+        print("\t" + "=" * 40)
+        print(f"\t回测报告 [{start} 至 {end}]")
+        print("\t" + "-" * 40)
+        print(f"\t\t年化收益: {metrics['annual_return']:>10.2%}")
+        print(f"\t\t最大回撤: {metrics['max_drawdown']:>10.2%}")
+        print(f"\t\t夏普比率: {metrics['sharpe']:>10.3f}")
+        print("\t" + "=" * 40 + "\n")
+
         self.backtest.plot(result)
+
         return result
 
     # ----------------------------------------

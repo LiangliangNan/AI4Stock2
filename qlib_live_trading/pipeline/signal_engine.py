@@ -42,7 +42,7 @@ class SignalEngine:
         elif isinstance(model_or_path, GenericModel):
             # 直接使用传入的 GenericModel
             self.model = model_or_path
-            print(f"[*] 已使用传入的 GenericModel 实例")
+            print(f"[*] 新创建 GenericModel 实例")
         else:
             raise TypeError("model_or_path 必须是 str (pickle 文件路径) 或 GenericModel 对象")
 
