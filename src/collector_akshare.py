@@ -96,25 +96,56 @@ QLIB_FIELDS = ['open', 'high', 'low', 'close', 'volume', 'amount', 'turnover',
 for d in [RAW_DAILY_DIR, RAW_VAL_DIR, PROCESSED_DIR, QLIB_CSV_DIR, QLIB_DIR]:
     d.mkdir(parents=True, exist_ok=True)
 
-def fetch_stock_list():
-    """Fetch all A-share stocks using patched requests."""
-    print("[*] Fetching stock list from AkShare...")
-    try:
-        df = ak.stock_zh_a_spot_em()
-        # df = df[df["代码"].str.match(r"^(000|001|002|003|300|301|600|601|603|605|688)")]
-        # 只允许以下前缀的代码通过:
-        #   - 000 / 001 / 002 / 003：深证主板（包含原来的中小板）
-        #   - 600 / 601 / 603 / 605：上证主板
-        # 下列板块会被彻底排除在下载列表之外:
-        #   - 300 / 301（创业板）
-        #   - 688（科创板
-        #   - 8、4 或 920（北交所 / 新三板）
-        df = df[df["代码"].str.match(r"^(00|60)")] #剔除创业板和科创板
-        print(f"filtered stock list: 00|60")
-        return df["代码"].tolist()
-    except Exception as e:
-        print(f"[!] Error fetching stock list: {e}")
-        return []
+#------------------------------------------------------------------------------------------
+# 在线获取A股个股代码
+# def fetch_stock_list():
+#     """Fetch all A-share stocks using patched requests."""
+#     print("[*] Fetching stock list from AkShare...")
+#     try:
+#         df = ak.stock_zh_a_spot_em()
+#         # df = df[df["代码"].str.match(r"^(000|001|002|003|300|301|600|601|603|605|688)")]
+#         # 只允许以下前缀的代码通过:
+#         #   - 000 / 001 / 002 / 003：深证主板（包含原来的中小板）
+#         #   - 600 / 601 / 603 / 605：上证主板
+#         # 下列板块会被彻底排除在下载列表之外:
+#         #   - 300 / 301（创业板）
+#         #   - 688（科创板
+#         #   - 8、4 或 920（北交所 / 新三板）
+#         df = df[df["代码"].str.match(r"^(00|60)")] #剔除创业板和科创板
+#         print(f"filtered stock list: 00|60")
+#         return df["代码"].tolist()
+#     except Exception as e:
+#         print(f"[!] Error fetching stock list: {e}")
+#         return []
+#------------------------------------------------------------------------------------------
+# 假如IP被封，从本地记录提取A股个股代码 （建议每隔一段时间跑一次在线抓取）
+def fetch_stock_list(file=f"{QLIB_DIR}/instruments/main_board.txt"):
+    """
+    从本地 main_board.txt 读取主板股票列表。
+    文件格式：
+        code    list_date    last_update
+    示例：
+        000001  1991-04-03   2026-03-13
+    返回
+    -------
+    list[str]
+        股票代码列表
+    """
+    file = Path(file)
+    if not file.exists():
+        raise FileNotFoundError(f"{file} not found")
+    symbols = []
+    with open(file, "r") as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) == 0:
+                continue
+            code = parts[0]
+            symbols.append(code)
+    print(f"[*] Loaded {len(symbols)} stocks from {file}")
+    return symbols
+#------------------------------------------------------------------------------------------
+
 
 def save_optimized_parquet(df, path):
     """Save with zstd compression to match old pipeline."""
@@ -332,7 +363,7 @@ if __name__ == "__main__":
         # python src/collector_akshare.py --update --convert --workers 4
         args.update = True
         args.convert = True
-        args.workers = 1
+        args.workers = 8
     #     # -----------------------------------------------------------
     #     # Fetch all A - shares
     #     args.all = True

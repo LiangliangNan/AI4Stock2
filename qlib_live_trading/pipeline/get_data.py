@@ -34,11 +34,11 @@ import urllib.request
 # ----------------------------
 # 目录定义
 # ----------------------------
-RAW_DAILY_DIR = Path("data/raw/daily")
-RAW_VAL_DIR = Path("data/raw/valuation")
-PROCESSED_DIR = Path("data/processed")
-QLIB_DIR = Path("data/qlib_data_cn")
-QLIB_CSV_DIR = Path("data/qlib_csv_temp")
+RAW_DAILY_DIR = Path("../data/raw/daily")
+RAW_VAL_DIR = Path("../data/raw/valuation")
+PROCESSED_DIR = Path("../data/processed")
+QLIB_DIR = Path("../data/qlib_data_cn")
+QLIB_CSV_DIR = Path("../data/qlib_csv_temp")
 
 for d in [RAW_DAILY_DIR, RAW_VAL_DIR, PROCESSED_DIR, QLIB_DIR, QLIB_CSV_DIR]:
     d.mkdir(parents=True, exist_ok=True)
@@ -59,23 +59,52 @@ VAL_RENAME_MAP = {
     '市现率': 'pcf','市销率': 'ps'
 }
 
+
 # ----------------------------
 # 股票列表获取
 # ----------------------------
-def fetch_stock_list():
+#------------------------------------------------------------------------------------------
+# def fetch_stock_list():
+#     """
+#     获取 A 股主板股票列表（00/60 开头）
+#     返回列表：['600000', '600004', ...]
+#     """
+#     try:
+#         print("[*] 获取主板股票列表...")
+#         df = ak.stock_zh_a_spot_em()
+#         df = df[df["代码"].str.match(r"^(00|60)")]
+#         return df["代码"].tolist()
+#     except Exception as e:
+#         print(f"[!] Error fetching stock list: {e}")
+#         exit(1)
+#------------------------------------------------------------------------------------------
+# 假如IP被封，从本地记录提取A股个股代码 （建议每隔一段时间跑一次在线抓取）
+def fetch_stock_list(file=f"{QLIB_DIR}/instruments/main_board.txt"):
     """
-    获取 A 股主板股票列表（00/60 开头）
-    返回列表：['600000', '600004', ...]
+    从本地 main_board.txt 读取主板股票列表。
+    文件格式：
+        code    list_date    last_update
+    示例：
+        000001  1991-04-03   2026-03-13
+    返回
+    -------
+    list[str]
+        股票代码列表
     """
-    try:
-        print("[*] 获取主板股票列表...")
-        df = ak.stock_zh_a_spot_em()
-        df = df[df["代码"].str.match(r"^(00|60)")]
-        return df["代码"].tolist()
-    except Exception as e:
-        print(f"[!] Error fetching stock list: {e}")
-        exit(1)
-
+    file = Path(file)
+    if not file.exists():
+        raise FileNotFoundError(f"{file} not found")
+    symbols = []
+    with open(file, "r") as f:
+        for line in f:
+            parts = line.strip().split()
+            if len(parts) == 0:
+                continue
+            code = parts[0]
+            symbols.append(code)
+    print(f"[*] Loaded {len(symbols)} stocks from {file}")
+    return symbols
+#------------------------------------------------------------------------------------------
 # ----------------------------
 # 数据抓取函数
 # ----------------------------
