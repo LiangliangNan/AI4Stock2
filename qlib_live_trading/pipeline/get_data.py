@@ -11,16 +11,18 @@ Prepare Data for Qlib Pipeline (A-share 主板)
 5. 生成 Qlib instruments 索引文件（main_board.txt）。
 ---------------------------------------------------------
 目录结构要求：
-data/
-├─ raw/
-│  ├─ daily/       # 存放原始 daily parquet
-│  └─ valuation/   # 存放原始 valuation parquet
-├─ processed/      # 合并后的 parquet
-└─ qlib_data_cn/   # Qlib 二进制目录
+    data/
+    ├─ raw/
+    │  ├─ daily/       # 存放原始 daily parquet
+    │  └─ valuation/   # 存放原始 valuation parquet
+    ├─ processed/      # 合并后的 parquet
+    └─ qlib_data_cn/   # Qlib 二进制目录
 =========================================================
 """
 
 import os
+import sys
+import datetime
 import pandas as pd
 from pathlib import Path
 import akshare as ak
@@ -30,6 +32,12 @@ import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 import urllib.request
+
+# ----------------------------
+# 动态日期获取
+# ----------------------------
+TODAY_STR = datetime.datetime.now().strftime("%Y%m%d")
+TODAY_TS = pd.Timestamp(datetime.datetime.now().date())
 
 # ----------------------------
 # 目录定义
@@ -46,17 +54,17 @@ for d in [RAW_DAILY_DIR, RAW_VAL_DIR, PROCESSED_DIR, QLIB_DIR, QLIB_CSV_DIR]:
 # ----------------------------
 # Qlib 字段定义
 # ----------------------------
-QLIB_FIELDS = ['open','high','low','close','volume','amount','turnover',
-               'total_mv','circ_mv','total_share','circ_share',
-               'pe_ttm','pe_static','pb','peg','pcf','ps',
-               'factor','industry']
+QLIB_FIELDS = ['open', 'high', 'low', 'close', 'volume', 'amount', 'turnover',
+               'total_mv', 'circ_mv', 'total_share', 'circ_share',
+               'pe_ttm', 'pe_static', 'pb', 'peg', 'pcf', 'ps',
+               'factor', 'industry']
 
 # 估值字段重命名映射
 VAL_RENAME_MAP = {
     '数据日期': 'date', '当日收盘价': 'v_close', '总市值': 'total_mv',
-    '流通市值': 'circ_mv','总股本': 'total_share','流通股本': 'circ_share',
-    'PE(TTM)': 'pe_ttm','PE(静)': 'pe_static','市净率': 'pb','PEG值': 'peg',
-    '市现率': 'pcf','市销率': 'ps'
+    '流通市值': 'circ_mv', '总股本': 'total_share', '流通股本': 'circ_share',
+    'PE(TTM)': 'pe_ttm', 'PE(静)': 'pe_static', '市净率': 'pb', 'PEG值': 'peg',
+    '市现率': 'pcf', '市销率': 'ps'
 }
 
 
@@ -93,36 +101,41 @@ def fetch_stock_list(file=f"{QLIB_DIR}/instruments/main_board.txt"):
     """
     file = Path(file)
     if not file.exists():
-        raise FileNotFoundError(f"{file} not found")
+        # 如果本地没有索引，则在线抓取一次
+        print("[*] 本地索引不存在，尝试在线获取主板股票列表...")
+        try:
+            df = ak.stock_zh_a_spot_em()
+            return df[df["代码"].str.match(r"^(00|60)")]["代码"].tolist()
+        except:
+            raise FileNotFoundError(f"{file} not found and online fetch failed")
+
     symbols = []
     with open(file, "r") as f:
         for line in f:
             parts = line.strip().split()
-            if len(parts) == 0:
-                continue
-            code = parts[0]
-            symbols.append(code)
+            if len(parts) == 0: continue
+            symbols.append(parts[0])
     print(f"[*] Loaded {len(symbols)} stocks from {file}")
     return symbols
-#------------------------------------------------------------------------------------------
+
+
 # ----------------------------
 # 数据抓取函数
 # ----------------------------
 def fetch_daily(symbol, start_date=None):
     """
     抓取单只股票 HFQ 日线行情
-    start_date: YYYYMMDD，可用于增量更新
-    返回 DataFrame
     """
     try:
+        # 使用动态 TODAY_STR 替换硬编码的 20251231
         df = ak.stock_zh_a_hist(symbol=symbol, period="daily", adjust="hfq",
-                                start_date=start_date, end_date="20251231")
+                                start_date=start_date, end_date=TODAY_STR)
         if df is None or df.empty:
             return None
-        df = df.rename(columns={"日期":"date","开盘":"open","收盘":"close",
-                                "最高":"high","最低":"low",
-                                "成交量":"volume","成交额":"amount",
-                                "换手率":"turnover"})
+        df = df.rename(columns={"日期": "date", "开盘": "open", "收盘": "close",
+                                "最高": "high", "最低": "low",
+                                "成交量": "volume", "成交额": "amount",
+                                "换手率": "turnover"})
         df['symbol'] = symbol
         df['date'] = pd.to_datetime(df['date'])
         return df
@@ -151,8 +164,7 @@ def fetch_valuation(symbol):
 # ----------------------------
 def merge_and_save(symbol):
     """
-    合并日线和估值数据，补充 industry 列，保存到 processed/
-    支持增量更新：已有 parquet 文件时只抓取缺失日期
+    合并日线和估值数据
     """
     # --- 1. 确定增量起始日期 ---
     daily_file = RAW_DAILY_DIR / f"{symbol}.parquet"
@@ -161,19 +173,25 @@ def merge_and_save(symbol):
         try:
             df_exist = pd.read_parquet(daily_file)
             last_date = pd.to_datetime(df_exist['date']).max()
-            start_daily = (last_date + pd.Timedelta(days=1)).strftime("%Y%m%d")
-        except: pass
+            # 如果最后日期已经到了今天，则无需抓取
+            if last_date >= TODAY_TS:
+                start_daily = None
+            else:
+                start_daily = (last_date + pd.Timedelta(days=1)).strftime("%Y%m%d")
+        except:
+            pass
 
-    df_daily = fetch_daily(symbol, start_date=start_daily)
-    if df_daily is None:
-        print(f"[!] {symbol} 日线无新数据")
-        return False
-
-    # 合并已有数据
-    if daily_file.exists():
-        df_exist = pd.read_parquet(daily_file)
-        df_daily = pd.concat([df_exist, df_daily], ignore_index=True).drop_duplicates('date').sort_values('date')
-    df_daily.to_parquet(daily_file, index=False)
+    if start_daily:
+        df_daily = fetch_daily(symbol, start_date=start_daily)
+        if df_daily is not None:
+            if daily_file.exists():
+                df_exist = pd.read_parquet(daily_file)
+                df_daily = pd.concat([df_exist, df_daily], ignore_index=True).drop_duplicates('date').sort_values(
+                    'date')
+            df_daily.to_parquet(daily_file, index=False)
+        else:
+            # print(f"[*] {symbol} 已经是最新，跳过日线抓取")
+            pass
 
     # ----------------------------
     # 估值数据
@@ -183,11 +201,30 @@ def merge_and_save(symbol):
     if val_file.exists():
         try:
             meta = pq.read_metadata(str(val_file))
-            rg = meta.row_group(meta.num_row_groups-1)
-            max_date = pd.Timestamp(rg.column(meta.schema.names.index('数据日期')).statistics.max)
-            if max_date >= pd.Timestamp("2025-12-31"):
-                fetch_val = False
-        except: pass
+            rg = meta.row_group(meta.num_row_groups - 1)
+            # ------------------------------------------------------------------------------------
+            # ------------------------------------------------------------------------------------
+            # --- 修改前 ---
+            # 这里的日期列名在元数据中保持原始中文 '数据日期'
+            # max_date = pd.Timestamp(rg.column(meta.schema.names.index('数据日期')).statistics.max)
+            # if max_date >= TODAY_TS:
+            #    fetch_val = False
+            # --- 修改后 ---
+            # 增强元数据读取的兼容性。倘若保存时将列名改为了英文 date，但 pyarrow 读取元数据统计信息时，有时会引用原始列名或索引位置
+            try:
+                # 优先尝试原始中文名，如果找不到则尝试英文名 date
+                col_index = meta.schema.names.index(
+                    '数据日期') if '数据日期' in meta.schema.names else meta.schema.names.index('date')
+                max_date = pd.Timestamp(rg.column(col_index).statistics.max)
+                if max_date >= TODAY_TS:
+                    fetch_val = False
+            except Exception:
+                fetch_val = True  # 如果读取元数据失败，保险起见重新抓取
+            # ------------------------------------------------------------------------------------
+            # ------------------------------------------------------------------------------------
+
+        except:
+            pass
 
     if fetch_val:
         df_val = fetch_valuation(symbol)
@@ -197,19 +234,28 @@ def merge_and_save(symbol):
     # ----------------------------
     # 融合 daily + valuation
     # ----------------------------
-    df_val = pd.read_parquet(val_file).rename(columns=VAL_RENAME_MAP)
-    df_daily['date'] = pd.to_datetime(df_daily['date'])
-    df_val['date'] = pd.to_datetime(df_val['date'])
-    df = pd.merge(df_daily, df_val, on='date', how='outer')
-    df['close'] = df['close'].fillna(df.get('v_close', pd.NA))
-    df = df.drop(columns=['v_close'], errors='ignore')
+    try:
+        df_daily = pd.read_parquet(daily_file)
+        df_val = pd.read_parquet(val_file).rename(columns=VAL_RENAME_MAP)
+        df_daily['date'] = pd.to_datetime(df_daily['date'])
+        df_val['date'] = pd.to_datetime(df_val['date'])
 
-    # 补充 industry 占位
-    df['industry'] = "Unknown"
+        df = pd.merge(df_daily, df_val, on='date', how='outer')
 
-    processed_file = PROCESSED_DIR / f"{symbol}.parquet"
-    df.to_parquet(processed_file, index=False)
-    return True
+        # 安全填充：仅当 close 缺失时使用 v_close，
+        # 注意：这里可能存在复权差异，理想情况下应由因子计算逻辑处理 NaN
+        if 'v_close' in df.columns:
+            # df['close'] = df['close'].fillna(df['v_close']) # 考虑到复权差异，暂时保持 close 纯净
+            df = df.drop(columns=['v_close'], errors='ignore')
+
+        df['industry'] = "Unknown"
+        processed_file = PROCESSED_DIR / f"{symbol}.parquet"
+        df.to_parquet(processed_file, index=False)
+        return True
+    except Exception as e:
+        print(f"[!] {symbol} 融合失败: {e}")
+        return False
+
 
 def collect_all(symbols=None, max_workers=4):
     """
@@ -217,7 +263,7 @@ def collect_all(symbols=None, max_workers=4):
     """
     if symbols is None:
         symbols = fetch_stock_list()
-    print(f"[*] 开始抓取 {len(symbols)} 只股票...")
+    print(f"[*] 开始处理 {len(symbols)} 只股票 (Workers: {max_workers})...")
 
     success_count = 0
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -234,16 +280,16 @@ def convert_to_qlib():
     """
     将 processed/ 下的 parquet 数据转换为 Qlib 二进制
     """
+    if QLIB_CSV_DIR.exists(): shutil.rmtree(QLIB_CSV_DIR)
     QLIB_CSV_DIR.mkdir(parents=True, exist_ok=True)
     files = list(PROCESSED_DIR.glob("*.parquet"))
 
     print("[*] 临时生成 CSV 用于 Qlib dump_bin...")
     for f in tqdm(files, desc="CSV Export"):
         df = pd.read_parquet(f)
-        df['factor'] = 1.0  # 占位
+        df['factor'] = 1.0
         for c in QLIB_FIELDS:
-            if c not in df.columns:
-                df[c] = float('nan')
+            if c not in df.columns: df[c] = float('nan')
         df[['date'] + QLIB_FIELDS].to_csv(QLIB_CSV_DIR / f"{f.stem}.csv", index=False)
 
     # 获取 dump_bin.py
@@ -252,17 +298,17 @@ def convert_to_qlib():
         url = "https://raw.githubusercontent.com/microsoft/qlib/main/scripts/dump_bin.py"
         urllib.request.urlretrieve(url, dump_bin_path)
 
-    cmd = ["python", str(dump_bin_path), "dump_all",
+    cmd = [sys.executable, str(dump_bin_path), "dump_all",
            "--data_path", str(QLIB_CSV_DIR.resolve()),
            "--qlib_dir", str(QLIB_DIR.resolve()),
            "--include_fields", ",".join(QLIB_FIELDS),
            "--date_field_name", "date"]
-    print(f"[*] 执行 Qlib 转换: {' '.join(cmd)}")
+    print(f"[*] 执行 Qlib 转换... {' '.join(cmd)}")
     subprocess.run(cmd, check=True)
 
     # 清理临时 CSV
     shutil.rmtree(QLIB_CSV_DIR)
-    print("[+] Qlib 数据生成完成！")
+
 
 # ----------------------------
 # 生成主板索引文件 main_board.txt
@@ -274,33 +320,46 @@ def generate_main_board_index():
     inst_dir = QLIB_DIR / "instruments"
     inst_dir.mkdir(parents=True, exist_ok=True)
     files = list(PROCESSED_DIR.glob("*.parquet"))
-
     lines = []
-    for f in files:
+    for f in tqdm(files, desc="Indexing"):
         code = f.stem.upper()
-        if not code.startswith(("00","60")):
-            continue
+        if not code.startswith(("00", "60")): continue
+        # ------------------------------------------------------------------------
+        # ------------------------------------------------------------------------
+        # --- 修改前 ---
+        # df = pd.read_parquet(f, columns=['date'])
+        # if df.empty: continue
+        # --- 修改后 ---
+        # 如果某个 parquet 文件只有表头没有数据，执行 min() 会报错导致整个索引生成中断。
         df = pd.read_parquet(f, columns=['date'])
-        if df.empty: continue
-        start_dt = df['date'].min().strftime('%Y-%m-%d')
-        end_dt = df['date'].max().strftime('%Y-%m-%d')
+        if df.empty or len(df) < 1:
+            continue
+        # 确保日期列没有全为 NaT
+        valid_dates = df['date'].dropna()
+        if valid_dates.empty:
+            continue
+        # ------------------------------------------------------------------------
+        # ------------------------------------------------------------------------
+        # 使用过滤后的 valid_dates 提取日期字符串
+        start_dt = valid_dates.min().strftime('%Y-%m-%d')
+        end_dt = valid_dates.max().strftime('%Y-%m-%d')
         lines.append(f"{code}\t{start_dt}\t{end_dt}")
 
     out_file = inst_dir / "main_board.txt"
     with open(out_file, "w") as f:
         f.write("\n".join(sorted(lines)) + "\n")
-    print(f"[+] 主板索引已生成: {out_file} (共 {len(lines)} 只股票)")
+    print(f"[+] 索引已生成: {out_file} (共 {len(lines)} 只股票)")
 
-# ----------------------------
-# CLI 执行入口
-# ----------------------------
+
 if __name__ == "__main__":
     import argparse
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--all", action="store_true", help="抓取全市场主板股票")
     parser.add_argument("--symbols", type=str, help="逗号分隔股票代码")
     parser.add_argument("--update", action="store_true", help="增量更新已有数据")
     parser.add_argument("--qlib", action="store_true", help="转换为 Qlib 二进制")
+    parser.add_argument("--workers", type=int, default=4, help="数据抓取线程数。若 success 数量大幅下降，请调低至 1 或 2")
     args = parser.parse_args()
     # 全量抓取 + Qlib 转换
     #       python prepare_data.py --all --qlib
@@ -321,7 +380,7 @@ if __name__ == "__main__":
         symbols_to_fetch = fetch_stock_list()
 
     if symbols_to_fetch:
-        collect_all(symbols_to_fetch)
+        collect_all(symbols_to_fetch, max_workers=args.workers)
 
     if args.qlib:
         convert_to_qlib()
