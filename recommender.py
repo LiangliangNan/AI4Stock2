@@ -227,10 +227,12 @@ def recommend(current_holdings):
     calendar = D.calendar()
     # latest_day = calendar[-1].strftime("%Y-%m-%d")
     latest_day = pd.Timestamp(calendar[-1])
+    print(f"[DEBUG] latest day in calendar: {latest_day}")
 
     # 手动重设 Handler 时间窗口，避免加载全量历史数据
     lookback_days = 100
     inference_start_day = calendar[-lookback_days].strftime("%Y-%m-%d")
+    print(f"[DEBUG] inference start day: {inference_start_day}")
     #---------------------------------------------------------------
     # Liangliang: 比较以下两种处理方式：
     # 方式一：直接修改handler的start_time和end_time属性
@@ -256,6 +258,7 @@ def recommend(current_holdings):
         all_data_index = handler.fetch(col_set="feature").index
         data_latest_date = all_data_index.get_level_values(0).max()
         days_diff = (datetime.datetime.now() - data_latest_date).days
+        print(f"[DEBUG] data latest date: {data_latest_date}")
 
         print("-" * 45)
         if days_diff > 4:
@@ -282,6 +285,7 @@ def recommend(current_holdings):
     # 6. 提取最新预测并生成决策数据
     actual_latest_date = preds.index.get_level_values(0).max()
     latest_preds = preds.loc[actual_latest_date]
+    print(f"[DEBUG] actual latest date (target date for prediction): {actual_latest_date}")
 
     advice_data = generate_rebalancing_advice(
         latest_preds=latest_preds,
