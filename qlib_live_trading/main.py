@@ -57,7 +57,10 @@ if __name__ == "__main__":
 
     # 输出当日选股组合
     # 可能包含字段：['symbol', 'score', 'rank', 'weight']
-    print(portfolio)
+    if (portfolio is not None) and (not portfolio.empty):
+        print(portfolio)
+    else:
+        print("[!] 今日未生成有效调仓组合，请检查数据时效性。")
 
     # -----------------------------
     # 4. 后续操作建议

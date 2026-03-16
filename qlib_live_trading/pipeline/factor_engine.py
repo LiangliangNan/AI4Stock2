@@ -37,6 +37,7 @@ class FactorEngine:
         self.instruments = instruments
 
     def compute_range(self, start, end):
+        print(f"[DEBUG] 计算因子... {start} -> {end}")
         handler = Alpha158(
             instruments=self.instruments,
             start_time=start,

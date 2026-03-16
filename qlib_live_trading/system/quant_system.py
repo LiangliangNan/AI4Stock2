@@ -203,24 +203,51 @@ class QuantSystem:
         用 date 日的因子和收盘行情计算每只股票的预测分数（score），然后生成目标组合。
         因为 A 股遵循 T+1 交易规则，所以当天收盘后选出的组合，实际交易在下一交易日执行。
         """
-        print(f"ToDo: check if the date on the trading calendar")
+        # 1. 检查交易日历
+        # 注意：建议这里先调用 D.calendar() 确认 date 是否为有效交易日
+        print(f"[*] 正在为交易日 {date} 生成推荐...")
         self.check_data_leakage(self.signal.model.train_start, self.signal.model.train_end, date, date)
 
-        # 确保因子覆盖
-        self.ensure_factors(date, date)
+        # 2. 确保因子覆盖（从预热点开始计算，到目标日结束）
+        # --- 设置 120 个交易日的预热窗口 ---
+        # 假设我们往前推 120 天以确保覆盖所有滚动窗口（如半年线、ROC60等）
+        start_date_with_warmup = (pd.Timestamp(date) - pd.Timedelta(days=120)).strftime('%Y-%m-%d')
+        # 这样 Alpha158 才有历史数据去计算 03-13 当天的均线等指标
+        self.ensure_factors(start_date_with_warmup, date)
 
-        # 读取因子
+        # 3. 读取因子
         df = self.store.load_range(date, date)
+        # --- 添加检查：df 是否有效 ---
+        if df is None or df.empty:
+            print(f"⚠️ [警告] 无法在本地存储中找到 {date} 的有效因子数据。")
+            print(f"   这通常是因为: 1.数据未更新; 2.当日停牌; 3.特征计算时未设置预热期导致全为空")
+            return None  # 或根据业务需求返回空字典
 
-        # 预测
-        df = self.signal.predict(df)
+        # 4. 预测前检查因子列是否存在
+        # 假设你的模型需要的特征列在 df 中是以多级索引或特定前缀存在的
+        if len(df.columns) == 0:
+            print(f"❌ [错误] {date} 的特征 DataFrame 列数为 0，预测被迫中断。")
+            return None
 
-        # 提取当天分数
-        scores = df.loc[date]["score"]
+        # 5. 执行预测
+        try:
+            df = self.signal.predict(df)
+        except ValueError as e:
+            print(f"❌ [预测异常] 模型推断失败: {e}")
+            return None
 
-        # 构建目标组合
-        portfolio = self.portfolio.build_target_portfolio(scores)
-        return portfolio
+        # 6. 提取当天分数并构建组合
+        if "score" not in df.columns:
+            print(f"❌ [错误] 预测结果中缺失 'score' 列。")
+            return None
+
+        try:
+            scores = df.loc[date]["score"]
+            portfolio = self.portfolio.build_target_portfolio(scores)
+            return portfolio
+        except KeyError:
+            print(f"⚠️ [关键警告] 预测结果中不包含日期 {date}，可能是当日全场数据缺失。")
+            return None
 
 
 """

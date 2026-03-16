@@ -17,10 +17,6 @@ import matplotlib.pyplot as plt
 from qlib.data import D
 import matplotlib
 
-# 设置中文字体
-plt.rcParams['font.family'] = 'Arial Unicode MS'
-matplotlib.rcParams['axes.unicode_minus'] = False
-
 class BacktestEngine:
     """
     工业级 A 股回测引擎
@@ -203,14 +199,14 @@ class BacktestEngine:
         plt.axhline(y=1.0, color='gray', linestyle='--', linewidth=1, alpha=0.8)
 
         # 2. 绘制净值线
-        plt.plot(dates, equity_no_cost, label="无费用", color="#3498db", alpha=0.6, linewidth=1)
-        plt.plot(dates, equity_cost, label="含费用", color="#e74c3c", linewidth=2)
+        plt.plot(dates, equity_no_cost, label="No fee", color="#3498db", alpha=0.6, linewidth=1)
+        plt.plot(dates, equity_cost, label="With fee", color="#e74c3c", linewidth=2)
 
         # 3. 性能指标标注 (放置在左上角最顶部)
         perf = self.analyze_performance(equity_cost)
-        info_text = (f"年化收益: {perf['annual_return']:.2%}\n"
-                     f"最大回撤: {perf['max_drawdown']:.2%}\n"
-                     f"夏普比率: {perf['sharpe']:.2f}")
+        info_text = (f"Annual return: {perf['annual_return']:.2%}\n"
+                     f"Max drawdown: {perf['max_drawdown']:.2%}\n"
+                     f"Sharp rate: {perf['sharpe']:.2f}")
 
         # 使用 transform=plt.gca().transAxes 相对坐标
         # x=0.02 (左偏), y=0.96 (极靠顶), verticalalignment='top'
@@ -227,9 +223,9 @@ class BacktestEngine:
         plt.legend(loc="upper left", bbox_to_anchor=(0.01, 0.78), frameon=True, fontsize=10)
 
         # 5. 图表美化
-        plt.title(f"回测权益曲线 ({dates[0].date()} ~ {dates[-1].date()})", fontsize=14, pad=20)
-        plt.xlabel("交易日期")
-        plt.ylabel("组合净值")
+        plt.title(f"Backtest accumulated value ({dates[0].date()} ~ {dates[-1].date()})", fontsize=14, pad=20)
+        plt.xlabel("Trade date")
+        plt.ylabel("Accumulated value")
         plt.grid(True, axis='y', linestyle=':', alpha=0.5)
 
         # 自动旋转日期标记
@@ -237,6 +233,7 @@ class BacktestEngine:
 
         plt.tight_layout()
         plt.show()
+        plt.savefig("backtest_result.png")
 
     @staticmethod
     def analyze_performance(equity_curve, periods_per_year=252):
