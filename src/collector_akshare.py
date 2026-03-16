@@ -158,7 +158,10 @@ def save_optimized_parquet(df, path):
 
 def fetch_and_fuse(symbol):
     """Fetch daily and valuation data, fuse them, and save."""
-    target_end_date = pd.Timestamp("2025-12-31")
+    # 自动获取今天
+    today_str = datetime.datetime.now().strftime("%Y%m%d")
+    target_end_date = pd.Timestamp(today_str)
+    # target_end_date = pd.Timestamp("2025-12-31")
     
     # 1. Fetch Daily (HFQ)
     file_path_d = RAW_DAILY_DIR / f"{symbol}.parquet"
@@ -178,7 +181,7 @@ def fetch_and_fuse(symbol):
 
     if current_start_d:
         try:
-            df_new = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date=current_start_d, end_date="20251231", adjust="hfq")
+            df_new = ak.stock_zh_a_hist(symbol=symbol, period="daily", start_date=current_start_d, end_date=today_str, adjust="hfq")
             if df_new is not None and not df_new.empty:
                 df_new = df_new.rename(columns={"日期": "date", "开盘": "open", "收盘": "close", "最高": "high", "最低": "low", "成交量": "volume", "成交额": "amount", "换手率": "turnover"})
                 df_new["date"] = pd.to_datetime(df_new["date"])
